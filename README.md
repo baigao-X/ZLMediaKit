@@ -147,9 +147,8 @@
   - 支持溯源模式的集群部署，溯源方式支持rtsp/rtmp/hls/http-ts, 边沿站支持hls, 源站支持多个(采用round robin方式溯源)
   - rtsp/rtmp/webrtc推流异常断开后，可以在超时时间内重连推流，播放器无感知
 
-
-## 闭源商业版
-在最新开源代码的基础，新增以下商业版本，详询邮箱：<1213642868@qq.com>
+## 闭源专业版
+在最新开源代码的基础，新增以下闭源专业版，详询邮箱：<1213642868@qq.com>
 - 转码版本
   - 1、音视频间任意转码(包括h265/h264/opus/g711/aac/g722/g722.1/mp3/svac等。
   - 2、基于配置文件的转码，支持设置比特率，codec类型等参数。
@@ -159,7 +158,7 @@
   - 6、支持负载过高时，转码主动降低帧率且不花屏。
   - 7、支持滤镜，支持添加osd文本以及logo角标等能力。
   - 8、支持全GPU硬件编解码与滤镜，防止显存与内存频繁拷贝。
-  - 9、支持视频全GPU推理插件，支持人员、车辆等目标AI识别。
+  - 9、支持视频全GPU(cuda)推理插件，支持人员、车辆等目标AI识别。
     
 - JT1078部标版本
   - 1、支持接收jt1078推流转其他协议；自适应音视频共享seq和单独seq模式。
@@ -174,7 +173,6 @@
  
 - VP9/AV1版本
   - 全面新增支持av1/vp9编码，rtmp/rtsp/ts/ps/hls/mp4/fmp4等协议全面支持av1/vp9。
-
 
 ## 编译以及测试
 **编译前务必仔细参考wiki:[快速开始](https://github.com/ZLMediaKit/ZLMediaKit/wiki/%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B)操作!!!**
@@ -410,6 +408,9 @@ bash build_docker_images.sh
 [ss002012](https://github.com/ss002012)
 [a839419160](https://github.com/a839419160)
 [oldma3095](https://github.com/oldma3095)
+[Dary](https://github.com/watersounds)
+[N.z](https://github.com/neesonqk)
+[yanggs](https://github.com/callinglove)
 
 同时感谢JetBrains对开源项目的支持，本项目使用CLion开发与调试：
 
