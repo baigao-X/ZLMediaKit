@@ -57,6 +57,8 @@
 #include "../webrtc/WebRtcPlayer.h"
 #include "../webrtc/WebRtcPusher.h"
 #include "../webrtc/WebRtcEchoTest.h"
+#include "../webrtc/WebRtcSignalingPeer.h"
+#include "../webrtc/WebRtcSignalingSession.h"
 #endif
 
 #if defined(ENABLE_VERSION)
@@ -314,72 +316,7 @@ static inline void addHttpListener(){
     });
 }
 
-template <typename Type>
-class ServiceController {
-public:
-    using Pointer = std::shared_ptr<Type>;
-    std::unordered_map<std::string, Pointer> _map;
-    mutable std::recursive_mutex _mtx;
 
-    void clear() {
-        decltype(_map) copy;
-        {
-            std::lock_guard<std::recursive_mutex> lck(_mtx);
-            copy.swap(_map);
-        }
-    }
-
-    size_t erase(const std::string &key) {
-        std::lock_guard<std::recursive_mutex> lck(_mtx);
-        return _map.erase(key);
-    }
-
-    size_t size() { 
-        std::lock_guard<std::recursive_mutex> lck(_mtx);
-        return _map.size();
-    }
-
-    Pointer find(const std::string &key) const {
-        std::lock_guard<std::recursive_mutex> lck(_mtx);
-        auto it = _map.find(key);
-        if (it == _map.end()) {
-            return nullptr;
-        }
-        return it->second;
-    }
-
-    void for_each(const std::function<void(const std::string&, const Pointer&)>& cb) {
-        std::lock_guard<std::recursive_mutex> lck(_mtx);
-        auto it = _map.begin();
-        while (it != _map.end()) {
-            cb(it->first, it->second);
-            it++;
-        }
-    }
-
-    template<class ..._Args>
-    Pointer make(const std::string &key, _Args&& ...__args) {
-        // assert(!find(key));
-
-        auto server = std::make_shared<Type>(std::forward<_Args>(__args)...);
-        std::lock_guard<std::recursive_mutex> lck(_mtx);
-        auto it = _map.emplace(key, server);
-        assert(it.second);
-        return server;
-    }
-
-    template<class ..._Args>
-    Pointer makeWithAction(const std::string &key, function<void(Pointer)> action, _Args&& ...__args) {
-        // assert(!find(key));
-
-        auto server = std::make_shared<Type>(std::forward<_Args>(__args)...);
-        action(server);
-        std::lock_guard<std::recursive_mutex> lck(_mtx);
-        auto it = _map.emplace(key, server);
-        assert(it.second);
-        return server;
-    }
-};
 
 // 拉流代理器列表  [AUTO-TRANSLATED:6dcfb11f]
 // Pull stream proxy list
@@ -2178,6 +2115,55 @@ void installWebApi() {
         }
         obj->safeShutdown(SockException(Err_shutdown, "deleted by http api"));
         invoker(200, headerOut, "");
+    });
+	
+    api_regist("/index/api/addWebrtcRoomKeeper",[](API_ARGS_MAP_ASYNC){
+        CHECK_SECRET();
+        CHECK_ARGS("server_host", "server_port", "room_id");
+
+        addWebrtcRoomKeeper(allArgs["server_host"], allArgs["server_port"], allArgs["room_id"],
+            [val, headerOut, invoker](const SockException &ex, const string &key) mutable {
+                if (ex) {
+                    val["code"] = API::OtherFailed;
+                    val["msg"] = ex.what();
+                } else {
+                    val["msg"] = "success";
+                    val["data"]["room_key"] = key;
+                }
+                invoker(200, headerOut, val.toStyledString());
+            });
+    });
+
+    api_regist("/index/api/delWebrtcRoomKeeper",[](API_ARGS_MAP_ASYNC){
+        CHECK_SECRET();
+        CHECK_ARGS("room_key");
+
+        delWebrtcRoomKeeper(allArgs["room_key"],
+            [val, headerOut, invoker](const SockException &ex) mutable {
+                if (ex) {
+                    val["code"] = API::OtherFailed;
+                    val["msg"] = ex.what();
+                }
+                invoker(200, headerOut, val.toStyledString());
+            });
+    });
+
+    api_regist("/index/api/listWebrtcRoomKeepers", [](API_ARGS_MAP) {
+        CHECK_SECRET();
+        listWebrtcRoomKeepers([&val](const std::string& key, const WebRtcSignalingPeer::Ptr& p) {
+            Json::Value item = ToJson(p);
+            item["room_key"] = key;
+            val["data"].append(item);
+        });
+    });
+
+    api_regist("/index/api/listWebrtcRooms", [](API_ARGS_MAP) {
+        CHECK_SECRET();
+        listWebrtcRooms([&val](const std::string& key, const WebRtcSignalingSession::Ptr& p) {
+            Json::Value item = ToJson(p);
+            item["room_id"] = key;
+            val["data"].append(item);
+        });
     });
 #endif
 

@@ -31,6 +31,7 @@ class DepLibSRTP;
 
 class SrtpSession {
 public:
+    using Ptr = std::shared_ptr<SrtpSession>;
     enum class CryptoSuite {
         NONE = 0,
         AES_CM_128_HMAC_SHA1_80 = 1,

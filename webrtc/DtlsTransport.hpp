@@ -35,8 +35,8 @@ namespace RTC
     class DtlsTransport : public std::enable_shared_from_this<DtlsTransport>
     {
     public:
-        enum class DtlsState
-        {
+        using Ptr = std::shared_ptr<DtlsTransport>;
+        enum class DtlsState {
             NEW = 1,
             CONNECTING,
             CONNECTED,
@@ -45,8 +45,7 @@ namespace RTC
         };
 
     public:
-        enum class Role
-        {
+        enum class Role {
             NONE = 0,
             AUTO = 1,
             CLIENT,
@@ -54,8 +53,7 @@ namespace RTC
         };
 
     public:
-        enum class FingerprintAlgorithm
-        {
+        enum class FingerprintAlgorithm {
             NONE = 0,
             SHA1 = 1,
             SHA224,
