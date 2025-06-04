@@ -21,16 +21,16 @@ namespace mediakit {
 
 WebRtcProxyPusher::WebRtcProxyPusher(const EventPoller::Ptr &poller, const RtspMediaSource::Ptr &src) : WebRtcClient(poller) {
     _push_src = src;
-	DebugL;
+    DebugL;
 }
 
 WebRtcProxyPusher::~WebRtcProxyPusher(void) {
     teardown();
-	DebugL;
+    DebugL;
 }
 
 void WebRtcProxyPusher::publish(const string &strUrl) {
-	DebugL;
+    DebugL;
     try {
         _url.parse(strUrl, isPlayer());
     } catch (std::exception &ex) {
@@ -43,7 +43,7 @@ void WebRtcProxyPusher::publish(const string &strUrl) {
 }
 
 void WebRtcProxyPusher::teardown() {
-	DebugL;
+    DebugL;
     WebRtcClient::onResult(SockException(Err_other, StrPrinter << "teardown: " << _url._full_url));
 }
 
@@ -51,7 +51,7 @@ void WebRtcProxyPusher::onResult(const SockException &ex) {
     WebRtcClient::onResult(ex);
 
     DebugL;
-     if (!ex) {
+    if (!ex) {
         // 播放成功
         onPublishResult(ex);
     } else {

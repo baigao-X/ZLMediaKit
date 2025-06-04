@@ -37,12 +37,10 @@ private:
     void onPlayResult(const toolkit::SockException &ex) override;
     std::vector<Track::Ptr> getTracks(bool ready = true) const override;
 
-private:
     //// TrackListener override////
     bool addTrack(const Track::Ptr &track) override { return true; }
     void addTrackCompleted() override;
 
-private:
 };
 
 } /* namespace mediakit */

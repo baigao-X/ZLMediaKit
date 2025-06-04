@@ -27,7 +27,7 @@ static inline string getRoomKeepersKey(const string &host, uint16_t &port) {
 }
 
 void addWebrtcRoomKeeper(const string &host, uint16_t port, const std::string& room_id,
-                  const function<void(const SockException &ex, const string &key)> &cb) {
+                         const function<void(const SockException &ex, const string &key)> &cb) {
     DebugL;
     auto key = getRoomKeepersKey(host, port);
     if (s_room_keepers.find(key)) {
@@ -75,7 +75,7 @@ WebRtcSignalingPeer::Ptr getWebrtcRoomKeeper(const string &host, uint16_t port) 
 ////////////  WebRtcSignalingPeer //////////////////////////
 ///
 WebRtcSignalingPeer::WebRtcSignalingPeer(const std::string &host, uint16_t port, const std::string& room_id, const EventPoller::Ptr &poller) 
-    : WebSocketClient<TcpClient>(poller), _room_id(room_id) {
+: WebSocketClient<TcpClient>(poller), _room_id(room_id) {
     TraceL;
     _ws_url = StrPrinter << "ws://" + host << ":" << port << "/signaling";
     _room_key = getRoomKeepersKey(host, port);
@@ -159,14 +159,14 @@ void WebRtcSignalingPeer::processOffer(SIGNALING_MSG_ARGS, WebRtcInterface &tran
 
         std::weak_ptr<WebRtcSignalingPeer> weak_self = std::static_pointer_cast<WebRtcSignalingPeer>(shared_from_this());
         transport.gatheringCandidates(_ice_server, [weak_self](const std::string& transport_identifier, const std::string& candidate,
-                                                                const std::string& ufrag, const std::string pwd) {
-            auto strong_self = weak_self.lock();
-            if (!strong_self) {
-                return;
-            }
-            strong_self->candidate(transport_identifier, candidate, ufrag, pwd);
-            return;
-        });
+                                                               const std::string& ufrag, const std::string pwd) {
+                                      auto strong_self = weak_self.lock();
+                                      if (!strong_self) {
+                                      return;
+                                      }
+                                      strong_self->candidate(transport_identifier, candidate, ufrag, pwd);
+                                      return;
+                                      });
     } catch (std::exception &ex) {
         Json::Value body;
         body[METHOD_KEY]   = allArgs[METHOD_KEY];
@@ -186,7 +186,7 @@ void WebRtcSignalingPeer::setOnConnect(function<void(const SockException &ex)> c
     _on_connect = cb ? std::move(cb) : [](const SockException &) {};
 }
 
- void WebRtcSignalingPeer::onConnect(const SockException &ex) {
+void WebRtcSignalingPeer::onConnect(const SockException &ex) {
     TraceL;
     if (_on_connect) {
         return _on_connect(ex);
@@ -413,14 +413,14 @@ void WebRtcSignalingPeer::handleCallRequest(SIGNALING_MSG_ARGS) {
     auto args = std::make_shared<WebRtcArgsImp<Json::Value>>(allArgs, allArgs[GUEST_ID_KEY]);
     std::weak_ptr<WebRtcSignalingPeer> weak_self = std::static_pointer_cast<WebRtcSignalingPeer>(shared_from_this());
     WebRtcPluginManager::Instance().negotiateSdp(*shared_from_this(), allArgs[TYPE_KEY], *args, 
-        [allArgs, weak_self](const WebRtcInterface &exchanger) mutable {
-            auto strong_self =  weak_self.lock();
-            if (!strong_self) {
-                return;
-            }
+                                                 [allArgs, weak_self](const WebRtcInterface &exchanger) mutable {
+                                                 auto strong_self =  weak_self.lock();
+                                                 if (!strong_self) {
+                                                 return;
+                                                 }
 
-            return strong_self->processOffer(allArgs, const_cast<WebRtcInterface&>(exchanger));
-    });
+                                                 return strong_self->processOffer(allArgs, const_cast<WebRtcInterface&>(exchanger));
+                                                 });
 
     return;
 };
@@ -496,7 +496,7 @@ void WebRtcSignalingPeer::handleCandidateIndication(SIGNALING_MSG_ARGS) {
             return;
         }
 
-       identifier = it->second;
+        identifier = it->second;
 
     } else {
         //作为主叫
@@ -504,7 +504,7 @@ void WebRtcSignalingPeer::handleCandidateIndication(SIGNALING_MSG_ARGS) {
             if (allArgs[ROOM_ID_KEY] != it.first) {
                 continue;
             }
- 
+
             auto info = it.second;
             if (allArgs[GUEST_ID_KEY] != info.first) {
                 break;
@@ -548,7 +548,7 @@ void WebRtcSignalingPeer::handleByeIndication(SIGNALING_MSG_ARGS) {
         WarnL << "not found guest_id: " << allArgs[GUEST_ID_KEY];
         return;
     }
- 
+
     auto identifier = it->second;
     _peer_guests.erase(allArgs[GUEST_ID_KEY]);
     auto obj = WebRtcTransportManager::Instance().getItem(identifier);
@@ -646,21 +646,21 @@ Json::Value WebRtcSignalingPeer::makeInfoJson() {
     Json::Value peer_guests_obj(Json::arrayValue);
     auto peer_guests = _peer_guests;
     for(auto &guest : peer_guests) {
-         Json::Value obj;
-         obj["guest_id"] = guest.first;
-         obj["transport_identifier"] = guest.second;
-         peer_guests_obj.append(obj);
+        Json::Value obj;
+        obj["guest_id"] = guest.first;
+        obj["transport_identifier"] = guest.second;
+        peer_guests_obj.append(obj);
     }
     item["guests"] = peer_guests_obj;
 
     Json::Value tours_obj(Json::arrayValue);
     auto tours = _tours;
     for(auto &tour : tours){
-         Json::Value obj;
-         obj["room_id"] = tour.first;
-         obj["guest_id"] = tour.second.first;
-         obj["transport_identifier"] = tour.second.second;
-         tours_obj.append(obj);
+        Json::Value obj;
+        obj["room_id"] = tour.first;
+        obj["guest_id"] = tour.second.first;
+        obj["transport_identifier"] = tour.second.second;
+        tours_obj.append(obj);
     }
     item["tours"] = tours_obj;
     return item;
@@ -669,15 +669,15 @@ Json::Value WebRtcSignalingPeer::makeInfoJson() {
 void WebRtcSignalingPeer::createResponseExpireTimer() {
     std::weak_ptr<WebRtcSignalingPeer> weak_self = std::static_pointer_cast<WebRtcSignalingPeer>(shared_from_this());
     _expire_timer = std::make_shared<Timer>(0.2,
-        [weak_self]() {
-            auto strong_self = weak_self.lock();
-            if (!strong_self) {
-                return false;
-            }
+                                            [weak_self]() {
+                                            auto strong_self = weak_self.lock();
+                                            if (!strong_self) {
+                                            return false;
+                                            }
 
-            strong_self->checkResponseExpire();
-            return true;
-        }, getPoller());
+                                            strong_self->checkResponseExpire();
+                                            return true;
+                                            }, getPoller());
 
     return;
 }
@@ -692,8 +692,8 @@ void WebRtcSignalingPeer::checkResponseExpire() {
             _tours.erase(peer_room_id);
             return false; // 停止计时器
         }, 
-            getPoller()
-        );
+        getPoller()
+    );
 #endif
 
     for (auto it : _response_list) {

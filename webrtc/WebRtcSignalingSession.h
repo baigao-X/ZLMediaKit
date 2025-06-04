@@ -51,7 +51,7 @@ protected:
     void handleUnregisterRequest(SIGNALING_MSG_ARGS);
     void handleCallRequest(SIGNALING_MSG_ARGS);
     void handleCallAccept(SIGNALING_MSG_ARGS);
-    #define handleCallRefuses handleCallAccept
+#define handleCallRefuses handleCallAccept
     void handleByeIndication(SIGNALING_MSG_ARGS);
     void handleCandidateIndication(SIGNALING_MSG_ARGS);
     void handleOtherMsg(SIGNALING_MSG_ARGS);
@@ -74,7 +74,7 @@ private:
     std::string _room_id;
     std::unordered_map<std::string /*guest id*/, std::string /*peer_room_id*/> _tours;  //作为主叫
     std::unordered_map<std::string /*peer_guest_id*/, WebRtcSignalingSession::WeakPtr /*session*/> _guests; //作为被叫
- 
+
 };
 
 using WebRtcWebcosktSignalingSession = WebSocketSession<WebRtcSignalingSession>;

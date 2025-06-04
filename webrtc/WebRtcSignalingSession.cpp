@@ -102,7 +102,7 @@ void WebRtcSignalingSession::handleRegisterRequest(SIGNALING_MSG_ARGS) {
     Json::Value body;
     body[METHOD_KEY] = METHOD_VALUE_REGISTER;
     body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
- 
+
     if (s_rooms.find(allArgs[ROOM_ID_KEY])) {
         //已经注册了
         sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "alreadly register");
@@ -126,7 +126,7 @@ void WebRtcSignalingSession::handleUnregisterRequest(SIGNALING_MSG_ARGS) {
         sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], StrPrinter << "room_id: \"" << allArgs[ROOM_ID_KEY] << "\" not match room_id:" << getRoomId());
         return;
     }
- 
+
     sendAcceptResponse(body, allArgs[TRANSACTION_ID_KEY]);
 
     //同时主动向所有连接的对端会话发送bye
@@ -421,10 +421,10 @@ Json::Value WebRtcSignalingSession::makeInfoJson() {
     Json::Value tours_obj(Json::arrayValue);
     auto tours = _tours;
     for(auto &tour : tours) {
-         Json::Value obj;
-         obj["guest_id"] = tour.first;
-         obj["room_id"] = tour.second;
-         tours_obj.append(obj);
+        Json::Value obj;
+        obj["guest_id"] = tour.first;
+        obj["room_id"] = tour.second;
+        tours_obj.append(obj);
     }
     item["tours"] = tours_obj;
 

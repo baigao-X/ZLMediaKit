@@ -37,7 +37,7 @@ public:
     std::string _app;
     std::string _stream;
     WebRtcTransport::SignalingProtocols _signaling_protocols 
-       = WebRtcTransport::SignalingProtocols::WHEP_WHIP;
+    = WebRtcTransport::SignalingProtocols::WHEP_WHIP;
     std::string _peer_room_id;    //peer room_id
 
 public:
@@ -74,15 +74,15 @@ protected:
 
 private:
 
-	void doNegotiate();
+    void doNegotiate();
 
-	void doNegotiateWebsocket();
-	void doNegotiateWhepOrWhip();
+    void doNegotiateWebsocket();
+    void doNegotiateWhepOrWhip();
     void checkIn();
     void checkOut();
-	void doBye();
-	void doByeWhepOrWhip();
-	void doByeWebsocket();
+    void doBye();
+    void doByeWhepOrWhip();
+    void doByeWebsocket();
     void gatheringCandidates(IceServerInfo::Ptr ice_server);
     void connectivityChecks();
     void candidate(const std::string& candidate, const std::string& ufrag, const std::string pwd);

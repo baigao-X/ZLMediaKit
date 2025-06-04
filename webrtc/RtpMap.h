@@ -27,7 +27,7 @@ class RtpMap {
 public:
     using Ptr = std::shared_ptr<RtpMap>;
     RtpMap(const std::string code_name, uint32_t payload, uint32_t clock_rate) :
-       _code_name (code_name), _payload(payload), _clock_rate(clock_rate) {
+        _code_name (code_name), _payload(payload), _clock_rate(clock_rate) {
     }
     virtual ~RtpMap() = default;
 
@@ -51,7 +51,7 @@ protected:
 class VideoRtpMap :public RtpMap {
 public:
     VideoRtpMap(const std::string codeName, uint32_t payload, uint32_t clock_rate) 
-        : RtpMap(codeName, payload, clock_rate) {};
+    : RtpMap(codeName, payload, clock_rate) {};
 
     TrackType getType() override { return TrackVideo;};
 };
@@ -59,49 +59,49 @@ public:
 class AudioRtpMap : public RtpMap {
 public:
     AudioRtpMap(const std::string codeName, uint32_t payload, uint32_t clock_rate) 
-       : RtpMap(codeName, payload, clock_rate) {};
+    : RtpMap(codeName, payload, clock_rate) {};
 
     TrackType getType() override { return TrackAudio;};
 };
 
 #define H264_PROFILE_IDC_MAP(XX) \
-    XX(PROFILE_H264_BASELINE,  66,  "baseline")      \
-    XX(PROFILE_H264_MAIN,      77,  "main")          \
-    XX(PROFILE_H264_HIGH,      100, "high")          \
-    XX(PROFILE_H264_HIGH10,    110, "high10")        \
-    XX(PROFILE_H264_HIGH422,   122, "high422")       \
-    XX(PROFILE_H264_HIGH444,   244, "high444")       \
+XX(PROFILE_H264_BASELINE,  66,  "baseline")      \
+XX(PROFILE_H264_MAIN,      77,  "main")          \
+XX(PROFILE_H264_HIGH,      100, "high")          \
+XX(PROFILE_H264_HIGH10,    110, "high10")        \
+XX(PROFILE_H264_HIGH422,   122, "high422")       \
+XX(PROFILE_H264_HIGH444,   244, "high444")       \
 
 typedef enum {
     H264ProfileIdcInvalid = -1,
-#define XX(name, value, str) name = value,
-    H264_PROFILE_IDC_MAP(XX)
-#undef XX
+    #define XX(name, value, str) name = value,
+                         H264_PROFILE_IDC_MAP(XX)
+    #undef XX
     H264ProfileIdcMax
 } H264ProfileIdc;
 
 #define H264_PROFILE_LEVEL_MAP(XX) \
-    XX(10) \
-    XX(20) \
-    XX(30) \
-    XX(31) \
-    XX(40) \
-    XX(41) \
-    XX(50) \
-    XX(51)
+XX(10) \
+XX(20) \
+XX(30) \
+XX(31) \
+XX(40) \
+XX(41) \
+XX(50) \
+XX(51)
 
 typedef enum {
     H264ProfileLevelInvalid = -1,
-#define XX(value) H264_PROFILE_LEVEL_##value = value,
-    H264_PROFILE_LEVEL_MAP(XX)
-#undef XX
+    #define XX(value) H264_PROFILE_LEVEL_##value = value,
+                           H264_PROFILE_LEVEL_MAP(XX)
+    #undef XX
     H264ProfileLevelMax
 } H264ProfileLevel;
 
 class H264RtpMap :public VideoRtpMap {
 public:
     H264RtpMap(uint32_t payload, uint32_t clock_rate, H264ProfileIdc profile_idc) 
-       : VideoRtpMap("H264", payload, clock_rate), _profile_idc(profile_idc) {
+    : VideoRtpMap("H264", payload, clock_rate), _profile_idc(profile_idc) {
         _fmtp.emplace("level-asymmetry-allowed", "1");
         _fmtp.emplace("packetization-mode", "1");
 
@@ -122,7 +122,7 @@ private:
 class H265RtpMap :public VideoRtpMap {
 public:
     H265RtpMap(uint32_t payload, uint32_t clock_rate, H264ProfileIdc profile_idc) 
-       : VideoRtpMap("H264", payload, clock_rate), _profile_idc(profile_idc) {
+    : VideoRtpMap("H264", payload, clock_rate), _profile_idc(profile_idc) {
         _fmtp.emplace("level-asymmetry-allowed", "1");
         _fmtp.emplace("packetization-mode", "1");
 
@@ -143,7 +143,7 @@ private:
 class VP9RtpMap :public VideoRtpMap {
 public:
     VP9RtpMap(uint32_t payload, uint32_t clock_rate, int profile_id) 
-       : VideoRtpMap("VP9", payload, clock_rate), _profile_id(profile_id) {
+    : VideoRtpMap("VP9", payload, clock_rate), _profile_id(profile_id) {
         _fmtp.emplace("profile-id=", std::to_string(_profile_id));
     };
 

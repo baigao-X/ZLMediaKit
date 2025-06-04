@@ -19,7 +19,6 @@ using namespace toolkit;
 using namespace RTC;
 namespace mediakit {
 
-
 class IceSession : public Session, public RTC::IceTransport::Listener {
 public:
     using Ptr = std::shared_ptr<IceSession>;

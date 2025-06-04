@@ -21,16 +21,16 @@ using namespace std;
 namespace mediakit {
 
 WebRtcProxyPlayer::WebRtcProxyPlayer(const EventPoller::Ptr &poller) 
-	: WebRtcClient(poller) {
-	DebugL;
+    : WebRtcClient(poller) {
+    DebugL;
 }
 
 WebRtcProxyPlayer::~WebRtcProxyPlayer(void) {
-	DebugL;
+    DebugL;
 }
 
 void WebRtcProxyPlayer::play(const string &strUrl) {
-	DebugL;
+    DebugL;
     try {
         _url.parse(strUrl, isPlayer());
     } catch (std::exception &ex) {
@@ -47,18 +47,18 @@ void WebRtcProxyPlayer::teardown() {
 }
 
 void WebRtcProxyPlayer::pause(bool bPause) {
-	DebugL;
+    DebugL;
 }
 
 void WebRtcProxyPlayer::speed(float speed) {
-	DebugL;
+    DebugL;
 }
 
 void WebRtcProxyPlayer::onResult(const SockException &ex) {
     WebRtcClient::onResult(ex);
 
     DebugL;
-     if (!ex) {
+    if (!ex) {
         // 播放成功
         onPlayResult(ex);
         _benchmark_mode = (*this)[Client::kBenchmarkMode].as<int>();

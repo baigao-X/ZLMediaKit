@@ -80,8 +80,8 @@ protected:
     using ResponseTrigger = std::function<void(const SockException &ex, std::string /*msg*/)>;
     using ResponseTuple = std::tuple<TimePoint /*expire time*/, std::string /*method*/, ResponseTrigger /*cb*/>;
 
-    #define TRANSACTION_ID_ANY std::string()
-    #define EXPIRE_NEVER TimePoint::max()
+#define TRANSACTION_ID_ANY std::string()
+#define EXPIRE_NEVER TimePoint::max()
 
     bool responseFilter(SIGNALING_MSG_ARGS, ResponseTrigger& trigger);
 
@@ -112,7 +112,7 @@ protected:
     void sendRequest(Json::Value& body, ResponseTrigger trigger, uint32_t seconds = 10);
     void sendResponse(Json::Value &body, const std::string& transaction_id);
     void sendPacket(Json::Value& body);
-  
+
 private:
     toolkit::Timer::Ptr _expire_timer;
     std::string _ws_url;
@@ -129,7 +129,7 @@ private:
 };
 
 void addWebrtcRoomKeeper(const std::string &host, uint16_t port, const std::string& room_id,
-                  const std::function<void(const SockException &ex, const std::string &key)> &cb);
+                         const std::function<void(const SockException &ex, const std::string &key)> &cb);
 void delWebrtcRoomKeeper(const std::string &key, const std::function<void(const SockException &ex)> &cb);
 void listWebrtcRoomKeepers(const std::function<void(const std::string& key, const WebRtcSignalingPeer::Ptr& p)> &cb);
 Json::Value ToJson(const WebRtcSignalingPeer::Ptr& p);
