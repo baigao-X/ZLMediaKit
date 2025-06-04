@@ -38,7 +38,7 @@ WebRtcSignalingSession::Ptr getWebrtcRoomKeeper(const string &room_id) {
 }
 
 ////////////  WebRtcSignalingSession //////////////////////////
-///
+
 WebRtcSignalingSession::WebRtcSignalingSession(const Socket::Ptr &sock) : Session(sock) {
     DebugL;
 }

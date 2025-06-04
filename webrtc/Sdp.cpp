@@ -295,7 +295,6 @@ void RtcSessionSdp::parse(const string &str) {
     RtcSdpBase *media = nullptr;
     auto lines = split(str, "\n");
     std::set<std::string> line_set;
-
     for (auto &line : lines) {
         trim(line);
         if (line.size() < 3 || line[1] != '=') {
@@ -313,6 +312,7 @@ void RtcSessionSdp::parse(const string &str) {
             media = &medias.back();
             line_set.clear();
         }
+
         SdpItem::Ptr item;
         auto it = sdpItemCreator.find(key);
         if (it != sdpItemCreator.end()) {
@@ -1625,7 +1625,6 @@ shared_ptr<RtcSession> RtcConfigure::createOffer() const {
         }
     }
 
- 
     return ret;
 }
 

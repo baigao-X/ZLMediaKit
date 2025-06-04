@@ -74,7 +74,6 @@ float WebRtcProxyPusher::getTimeOutSec() {
     return (float)timeoutMS / (float)1000;
 }
 
-
 void WebRtcProxyPusher::onNegotiateFinish() {
     DebugL;
     onResult(SockException(Err_success, "webrtc push success"));
@@ -88,13 +87,12 @@ void WebRtcProxyPusher::doPublish() {
         onResult(SockException(Err_eof, "the media source was released"));
         return;
     }
-    // 异步查找直播流
+
     std::weak_ptr<WebRtcProxyPusher> weak_self = static_pointer_cast<WebRtcProxyPusher>(shared_from_this());
     _rtsp_reader = src->getRing()->attach(getPoller());
     _rtsp_reader->setDetachCB([weak_self]() {
         auto strong_self = weak_self.lock();
         if (!strong_self) {
-            // 本对象已经销毁
             return;
         }
         strong_self->onShutdown(SockException(Err_shutdown));

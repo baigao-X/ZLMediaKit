@@ -30,7 +30,8 @@ struct MediaTuple {
 
     MediaTuple() {};
     MediaTuple(const std::string& vhost, const std::string& app, const std::string& stream, const std::string& params = "")
-    : vhost(vhost), app(app), stream(stream), params(params) {}
+        : vhost(vhost), app(app), stream(stream), params(params) {
+    }
 };
 
 class RecordInfo: public MediaTuple {

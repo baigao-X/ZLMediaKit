@@ -34,20 +34,20 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 using namespace std;
 
-#define LOG_OPENSSL_ERROR(desc)                                                                          \
-    do                                                                                                   \
-    {                                                                                                    \
-        if (ERR_peek_error() == 0)                                                                       \
+#define LOG_OPENSSL_ERROR(desc)                                                                    \
+    do                                                                                               \
+    {                                                                                                \
+        if (ERR_peek_error() == 0)                                                                     \
             MS_ERROR("OpenSSL error [desc:'%s']", desc);                                                 \
-        else                                                                                             \
-        {                                                                                                \
+        else                                                                                           \
+        {                                                                                              \
             int64_t err;                                                                                 \
             while ((err = ERR_get_error()) != 0)                                                         \
             {                                                                                            \
-                MS_ERROR("OpenSSL error [desc:'%s', error:'%s']", desc, ERR_error_string(err, nullptr)); \
+                MS_ERROR("OpenSSL error [desc:'%s', error:'%s']", desc, ERR_error_string(err, nullptr));   \
             }                                                                                            \
             ERR_clear_error();                                                                           \
-        }                                                                                                \
+        }                                                                                              \
     } while (false)
 
 /* Static methods for OpenSSL callbacks. */

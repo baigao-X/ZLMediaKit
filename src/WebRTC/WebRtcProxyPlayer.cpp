@@ -38,7 +38,6 @@ void WebRtcProxyPlayer::play(const string &strUrl) {
         return;
     }
 
-
     startConnect();
     return;
 }

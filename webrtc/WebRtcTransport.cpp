@@ -185,6 +185,7 @@ static uint32_t calIceCandidatePriority(CandidateInfo::AddressType type, uint32_
 
 static SdpAttrCandidate::Ptr
 makeIceCandidate(std::string ip, uint16_t port, uint32_t priority = 100, const std::string& proto = "udp", const std::string& type = "host") {
+    TODO:
     auto candidate = std::make_shared<SdpAttrCandidate>();
     candidate->foundation = proto + "candidate";
     // rtp端口  [AUTO-TRANSLATED:b0addb27]
@@ -196,7 +197,6 @@ makeIceCandidate(std::string ip, uint16_t port, uint32_t priority = 100, const s
     candidate->port = port;
     candidate->type = type;
     if (type != "host") {
-        // candidate->arr.push_back(std::make_pair("raddr", candidate._base_addr._host));
         // candidate->arr.push_back(std::make_pair("raddr", candidate._base_addr._host));
     }
     if (proto == "tcp") {
@@ -546,7 +546,7 @@ void WebRtcTransport::setRemoteDtlsFingerprint(SdpType type, const RtcSession &r
     auto& media = (type == SdpType::answer) ? _answer_sdp->media[0]: _offer_sdp->media[0];
     RTC::DtlsTransport::Fingerprint remote_fingerprint;
     remote_fingerprint.algorithm 
-		= RTC::DtlsTransport::GetFingerprintAlgorithm(media.fingerprint.algorithm);
+        = RTC::DtlsTransport::GetFingerprintAlgorithm(media.fingerprint.algorithm);
     remote_fingerprint.value = media.fingerprint.hash;
     _dtls_transport->SetRemoteFingerprint(remote_fingerprint);
 }
@@ -556,7 +556,7 @@ void WebRtcTransport::onRtcConfigure(RtcConfigure &configure) const {
     fingerprint.algorithm = _offer_sdp? _offer_sdp->media[0].fingerprint.algorithm : "sha-256";
     fingerprint.hash = getFingerprint(fingerprint.algorithm, _dtls_transport);
     configure.setDefaultSetting(
-		_ice_agent->getUfrag(), _ice_agent->getPassword(), RtpDirection::sendrecv, fingerprint);
+        _ice_agent->getUfrag(), _ice_agent->getPassword(), RtpDirection::sendrecv, fingerprint);
 
     // 开启remb后关闭twcc，因为开启twcc后remb无效  [AUTO-TRANSLATED:8a8feca2]
     // Turn off twcc after turning on remb, because remb is invalid after turning on twcc
@@ -572,12 +572,9 @@ static void setSdpBitrate(RtcSession &sdp) {
     auto m = (RtcMedia *)(sdp.getMedia(TrackType::TrackVideo));
     if (m) {
         auto &plan = m->plan[0];
-        if (max_bitrate)
-            plan.fmtp["x-google-max-bitrate"] = std::to_string(max_bitrate);
-        if (min_bitrate)
-            plan.fmtp["x-google-min-bitrate"] = std::to_string(min_bitrate);
-        if (start_bitrate)
-            plan.fmtp["x-google-start-bitrate"] = std::to_string(start_bitrate);
+        if (max_bitrate) plan.fmtp["x-google-max-bitrate"] = std::to_string(max_bitrate);
+        if (min_bitrate) plan.fmtp["x-google-min-bitrate"] = std::to_string(min_bitrate);
+        if (start_bitrate) plan.fmtp["x-google-start-bitrate"] = std::to_string(start_bitrate);
     }
 }
 
@@ -937,14 +934,14 @@ void WebRtcTransportImp::onCheckAnswer(RtcSession &sdp) {
 
 void WebRtcTransportImp::onCheckSdp(SdpType type, RtcSession &sdp) {
     switch (type) {
-        case SdpType::answer:
-            onCheckAnswer(sdp);
-            break;
-        case SdpType::offer:
-            break;
-        default: /*不可达*/
-            assert(0);
-            break;
+    case SdpType::answer:
+        onCheckAnswer(sdp);
+        break;
+    case SdpType::offer:
+        break;
+    default: /*不可达*/
+        assert(0);
+        break;
     }
 }
 
@@ -1043,9 +1040,7 @@ public:
     }
 
     Buffer::Ptr createRtcpRR(RtcpHeader *sr, uint32_t ssrc) {
-        if (sr) {
-            _rtcp_context.onRtcp(sr);
-        }
+        _rtcp_context.onRtcp(sr);
         return _rtcp_context.createRtcpRR(ssrc, getSSRC());
     }
 
@@ -1126,16 +1121,13 @@ void WebRtcTransportImp::onRtcp(const char *buf, size_t len) {
                 auto &track = it->second;
                 auto rtp_chn = track->getRtpChannel(sr->ssrc);
                 if (!rtp_chn) {
-                    // WarnL << "未识别的sr rtcp包:" << rtcp->dumpString();
+                    WarnL << "未识别的sr rtcp包:" << rtcp->dumpString();
                 } else {
                     // 设置rtp时间戳与ntp时间戳的对应关系  [AUTO-TRANSLATED:e92f4749]
                     // Set the correspondence between rtp timestamp and ntp timestamp
                     rtp_chn->setNtpStamp(sr->rtpts, sr->getNtpUnixStampMS());
-                    if (_rtcp_rr_send_ticker.elapsedTime() > 5000) {
-                        auto rr = rtp_chn->createRtcpRR(sr, track->answer_ssrc_rtp);
-                        sendRtcpPacket(rr->data(), rr->size(), true);
-                        _rtcp_rr_send_ticker.resetTime();
-                    }
+                    auto rr = rtp_chn->createRtcpRR(sr, track->answer_ssrc_rtp);
+                    sendRtcpPacket(rr->data(), rr->size(), true);
                 }
             } else {
                 WarnL << "未识别的sr rtcp包:" << rtcp->dumpString();
@@ -1152,11 +1144,8 @@ void WebRtcTransportImp::onRtcp(const char *buf, size_t len) {
                 if (it != _ssrc_to_track.end()) {
                     auto &track = it->second;
                     track->rtcp_context_send->onRtcp(rtcp);
-                    if (_rtcp_sr_send_ticker.elapsedTime() > 5000) {
-                        auto sr = track->rtcp_context_send->createRtcpSR(track->answer_ssrc_rtp);
-                        sendRtcpPacket(sr->data(), sr->size(), true);
-                        _rtcp_sr_send_ticker.resetTime();
-                    }
+                    auto sr = track->rtcp_context_send->createRtcpSR(track->answer_ssrc_rtp);
+                    sendRtcpPacket(sr->data(), sr->size(), true);
                 } else {
                     WarnL << "未识别的rr rtcp包:" << rtcp->dumpString();
                 }
@@ -1370,16 +1359,6 @@ void WebRtcTransportImp::onSortedRtp(MediaTrack &track, const string &rid, RtpPa
         }
     }
 
-
-    if (track.media->type == TrackVideo && _rtcp_rr_send_ticker.elapsedTime() > 5000) {
-        // 定期发送rr报文
-        auto rtp_chn = track.getRtpChannel(rtp->getSSRC());
-        rtp_chn->setNtpStamp(rtp->getStampMS(false), rtp->getStampMS(true));
-        auto rr = rtp_chn->createRtcpRR(nullptr, track.answer_ssrc_rtp);
-        sendRtcpPacket(rr->data(), rr->size(), true);
-        _rtcp_rr_send_ticker.resetTime();
-    }
-
     onRecvRtp(track, rid, std::move(rtp));
 }
 
@@ -1414,14 +1393,6 @@ void WebRtcTransportImp::onSendRtp(const RtpPacket::Ptr &rtp, bool flush, bool r
     pair<bool /*rtx*/, MediaTrack *> ctx { rtx, track.get() };
     sendRtpPacket(rtp->data() + RtpPacket::kRtpTcpHeaderSize, rtp->size() - RtpPacket::kRtpTcpHeaderSize, flush, &ctx);
     _bytes_usage += rtp->size() - RtpPacket::kRtpTcpHeaderSize;
-
-    if (track->media->type == TrackVideo && _rtcp_sr_send_ticker.elapsedTime() > 5000) {
-        // 定期发送sr报文
-        _rtcp_sr_send_ticker.resetTime();
-        auto sr = track->rtcp_context_send->createRtcpSR(track->answer_ssrc_rtp);
-        sendRtcpPacket(sr->data(), sr->size(), true);
-    }
-
 }
 
 void WebRtcTransportImp::onBeforeEncryptRtp(const char *buf, int &len, void *ctx) {
@@ -1627,7 +1598,7 @@ void push_plugin(SocketHelper& sender, const WebRtcArgs &args, const onCreateWeb
             push_src->setProtocolOption(option);
         }
         auto rtc = WebRtcPusher::create(EventPollerPool::Instance().getPoller(), push_src, push_src_ownership, info, option, 
-                                        WebRtcTransport::Role::PEER, WebRtcTransport::SignalingProtocols::WHEP_WHIP);
+            WebRtcTransport::Role::PEER, WebRtcTransport::SignalingProtocols::WHEP_WHIP);
         push_src->setListener(rtc);
         cb(*rtc);
     };
@@ -1665,7 +1636,7 @@ void play_plugin(SocketHelper &sender, const WebRtcArgs &args, const onCreateWeb
             // Restore to RTC, the purpose is to identify which playback protocol during hooking
             info.schema = "rtc";
             auto rtc = WebRtcPlayer::create(EventPollerPool::Instance().getPoller(), src, info, 
-                                            WebRtcTransport::Role::PEER, WebRtcTransport::SignalingProtocols::WHEP_WHIP);
+                WebRtcTransport::Role::PEER, WebRtcTransport::SignalingProtocols::WHEP_WHIP);
             cb(*rtc);
         });
     };

@@ -190,7 +190,7 @@ void WebRtcClient::doNegotiateWebsocket() {
         return;
     }
 
-    //TODO: 未注册的,先增加注册流程，并在此次播放结束后注销
+    //未注册的,先增加注册流程，并在此次播放结束后注销
     // throw std::invalid_argument(StrPrinter << "please register to signaling server " << _url._host << "::" << _url._port << " first");
     InfoL << (StrPrinter << "register to signaling server " << _url._host << "::" << _url._port << " first");
     auto room_id = "ringing_" + makeRandStr(16);
@@ -222,24 +222,21 @@ void WebRtcClient::checkIn() {
     weak_ptr<WebRtcClient> weak_self = static_pointer_cast<WebRtcClient>(shared_from_this());
     auto tuple = MediaTuple(_url._vhost, _url._app, _url._stream, "");
     _peer->checkIn(_url._peer_room_id, tuple, _transport->getIdentifier(), _transport->createOfferSdp(), isPlayer(),
-                   [weak_self](const SockException &ex, const std::string& answer) {
+    [weak_self](const SockException &ex, const std::string& answer) {
+       auto strong_self = weak_self.lock();
+       if (!strong_self) {
+           return false;
+       }
+       if (ex) {
+           WarnL << "network err:" << ex.getErrCode() << " " << ex.what();
+           strong_self->onResult(ex);
+           return false;
+       }
 
-                   auto strong_self = weak_self.lock();
-                   if (!strong_self) {
-                   return false;
-                   }
-                   if (ex) {
-                   WarnL << "network err:" << ex.getErrCode() << " " << ex.what();
-                   strong_self->onResult(ex);
-                   return false;
-                   }
-
-                   strong_self->_transport->setAnswerSdp(answer);
-
-                   strong_self->onNegotiateFinish();
-                   return true;
-
-                   }, getTimeOutSec());
+       strong_self->_transport->setAnswerSdp(answer);
+       strong_self->onNegotiateFinish();
+       return true;
+    }, getTimeOutSec());
 }
 
 void WebRtcClient::checkOut() {
@@ -258,12 +255,12 @@ void WebRtcClient::gatheringCandidates(IceServerInfo::Ptr ice_server) {
     DebugL;
     std::weak_ptr<WebRtcClient> weak_self = std::static_pointer_cast<WebRtcClient>(shared_from_this());
     _transport->gatheringCandidates(ice_server, [weak_self](const std::string& transport_identifier, const std::string& candidate,
-                                                            const std::string& ufrag, const std::string& pwd) {
-    auto strong_self = weak_self.lock();
-    if (!strong_self) {
-        return;
-    }
-    strong_self->candidate(candidate, ufrag, pwd);
+        const std::string& ufrag, const std::string& pwd) {
+        auto strong_self = weak_self.lock();
+        if (!strong_self) {
+            return;
+        }
+        strong_self->candidate(candidate, ufrag, pwd);
     });
 }
 
@@ -277,14 +274,14 @@ void WebRtcClient::doBye() {
     return;
 }
 void WebRtcClient::doByeWhepOrWhip() {
+    TODO:
 }
 
 void WebRtcClient::doByeWebsocket() {
-
+    TODO:
 }
 
 void WebRtcClient::onResult(const SockException &ex) {
-
     if (!ex) {
         // 会话建立成功
     } else {
@@ -306,7 +303,6 @@ float WebRtcClient::getTimeOutSec() {
     }
     return (float)timeout * (float)1000;
 };
-
 
 } /* namespace mediakit */
 

@@ -102,5 +102,5 @@ private:
     std::map<std::string /*candidate key*/, SocketHelper::Ptr> _socket_map;
 };
 
-} /*amespace mediakit */
+} /*namespace mediakit */
 #endif /* ZLMEDIAKIT_WEBRTC_CLIENT_H */

@@ -85,6 +85,7 @@ private:
     // 推流的rtsp源  [AUTO-TRANSLATED:4f976bca]
     // Rtsp source of the stream
     RtspMediaSource::Ptr _push_src;
+    // for mk_api
     RtspDemuxer::Ptr _demuxer;
     // 推流所有权  [AUTO-TRANSLATED:d0ddf5c7]
     // Stream ownership

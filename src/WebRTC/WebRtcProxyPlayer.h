@@ -22,7 +22,6 @@
 
 namespace mediakit {
 
-
 // 实现了webrtc代理拉流功能
 class WebRtcProxyPlayer
     : public PlayerBase , public WebRtcClient {

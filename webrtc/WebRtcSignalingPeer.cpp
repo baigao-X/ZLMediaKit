@@ -73,7 +73,7 @@ WebRtcSignalingPeer::Ptr getWebrtcRoomKeeper(const string &host, uint16_t port) 
 }
 
 ////////////  WebRtcSignalingPeer //////////////////////////
-///
+
 WebRtcSignalingPeer::WebRtcSignalingPeer(const std::string &host, uint16_t port, const std::string& room_id, const EventPoller::Ptr &poller) 
 : WebSocketClient<TcpClient>(poller), _room_id(room_id) {
     TraceL;
@@ -712,8 +712,6 @@ void WebRtcSignalingPeer::checkResponseExpire() {
             return;
         }
     }
-
-
 }
 
 }// namespace mediakit
