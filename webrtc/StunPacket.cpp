@@ -129,17 +129,17 @@ bool StunAttribute::isComprehensionRequired(const uint8_t *data, size_t len) {
 }
 
 void StunAttribute::loadHeader(const uint8_t *buf) {
-    _type = (Type)Utils::Byte::Get2Bytes(buf, 0);
-    _content_length = Utils::Byte::Get2Bytes(buf, 2);
+    _type = (Type)Byte::Get2Bytes(buf, 0);
+    _content_length = Byte::Get2Bytes(buf, 2);
 }
 
 void StunAttribute::storeHeader() {
-    _data = toolkit::BufferRaw::create(ATTR_HEADER_SIZE + Utils::Byte::PadTo4Bytes(_content_length));
+    _data = toolkit::BufferRaw::create(ATTR_HEADER_SIZE + Byte::PadTo4Bytes(_content_length));
     _data->setSize(_data->getCapacity());
     memset(_data->data(), 0, _data->size());
     uint8_t *ptr = (uint8_t *)_data->data();
-    Utils::Byte::Set2Bytes(ptr, 0, (uint16_t)_type);
-    Utils::Byte::Set2Bytes(ptr, 2, _content_length);
+    Byte::Set2Bytes(ptr, 0, (uint16_t)_type);
+    Byte::Set2Bytes(ptr, 2, _content_length);
 }
 
 bool StunAttrMappedAddress::loadFromData(const uint8_t *buf, size_t len) {
@@ -179,8 +179,8 @@ bool StunAttrMessageIntegrity::storeToData() {
 
 bool StunAttrErrorCode::loadFromData(const uint8_t *buf, size_t len) {
     StunAttribute::loadHeader(buf);
-    uint16_t klass = Utils::Byte::Get1Byte(buf + ATTR_HEADER_SIZE, 2);
-    uint16_t number = Utils::Byte::Get1Byte(buf + ATTR_HEADER_SIZE, 3);
+    uint16_t klass = Byte::Get1Byte(buf + ATTR_HEADER_SIZE, 2);
+    uint16_t number = Byte::Get1Byte(buf + ATTR_HEADER_SIZE, 3);
     _error_code = (Code)(klass * 100 + number);
     return true;
 }
@@ -188,43 +188,43 @@ bool StunAttrErrorCode::loadFromData(const uint8_t *buf, size_t len) {
 bool StunAttrErrorCode::storeToData() {
     _content_length = 4;
     StunAttribute::storeHeader();
-    Utils::Byte::Set2Bytes((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 0, 0); //reserved
-    Utils::Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 2, (((uint16_t)_error_code) /100));
-    Utils::Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 3, (((uint16_t)_error_code) %100));
+    Byte::Set2Bytes((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 0, 0); //reserved
+    Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 2, (((uint16_t)_error_code) /100));
+    Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 3, (((uint16_t)_error_code) %100));
     return true;
 }
 
 bool StunAttrChannelNumber::loadFromData(const uint8_t *buf, size_t len) {
     StunAttribute::loadHeader(buf);
-    _channel_number = Utils::Byte::Get2Bytes(buf + ATTR_HEADER_SIZE, 0);
+    _channel_number = Byte::Get2Bytes(buf + ATTR_HEADER_SIZE, 0);
     return true;
 }
 
 bool StunAttrChannelNumber::storeToData() {
     _content_length = 4;
     StunAttribute::storeHeader();
-    Utils::Byte::Set2Bytes((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 0, _channel_number);
-    Utils::Byte::Set2Bytes((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 2, 0); // RFFU
+    Byte::Set2Bytes((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 0, _channel_number);
+    Byte::Set2Bytes((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 2, 0); // RFFU
     return true;
 }
 
 bool StunAttrLifeTime::loadFromData(const uint8_t *buf, size_t len) {
     StunAttribute::loadHeader(buf);
-    _lifetime = Utils::Byte::Get4Bytes(buf + ATTR_HEADER_SIZE, 0);
+    _lifetime = Byte::Get4Bytes(buf + ATTR_HEADER_SIZE, 0);
     return true;
 }
 
 bool StunAttrLifeTime::storeToData() {
     _content_length = 4;
     StunAttribute::storeHeader();
-    Utils::Byte::Set4Bytes((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 0, _lifetime);
+    Byte::Set4Bytes((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 0, _lifetime);
     return true;
 }
 
 bool StunAttrXorPeerAddress::loadFromData(const uint8_t *buf, size_t len) {
     StunAttribute::loadHeader(buf);
     memset(&_addr, 0, sizeof(_addr));
-    auto protocol = Utils::Byte::Get1Byte(buf + ATTR_HEADER_SIZE, 1);
+    auto protocol = Byte::Get1Byte(buf + ATTR_HEADER_SIZE, 1);
     if (protocol == 0x01) {
         _addr.ss_family = AF_INET;
         auto attrValue = (uint8_t*)buf + ATTR_HEADER_SIZE;
@@ -235,7 +235,7 @@ bool StunAttrXorPeerAddress::loadFromData(const uint8_t *buf, size_t len) {
         attrValue[6] ^= StunPacket::_magicCookie[2];
         attrValue[7] ^= StunPacket::_magicCookie[3];
         struct sockaddr_in* ipv4 = (struct sockaddr_in*)&_addr;
-        ipv4->sin_port = ntohs(Utils::Byte::Get2Bytes(buf + ATTR_HEADER_SIZE, 2));
+        ipv4->sin_port = ntohs(Byte::Get2Bytes(buf + ATTR_HEADER_SIZE, 2));
         std::memcpy((void*)&(reinterpret_cast<const sockaddr_in*>(&_addr))->sin_addr.s_addr, attrValue + 4, 4);
     } else {
         _addr.ss_family = AF_INET6;
@@ -259,7 +259,7 @@ bool StunAttrXorPeerAddress::loadFromData(const uint8_t *buf, size_t len) {
         attrValue[18] ^= _transaction_id[10];
         attrValue[19] ^= _transaction_id[11];
         struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)&_addr;
-        ipv6->sin6_port = ntohs(Utils::Byte::Get2Bytes(buf + ATTR_HEADER_SIZE, 2));
+        ipv6->sin6_port = ntohs(Byte::Get2Bytes(buf + ATTR_HEADER_SIZE, 2));
         std::memcpy((void*)&(reinterpret_cast<const sockaddr_in6*>(&_addr))->sin6_addr.s6_addr, attrValue + 4, 16);
     }
 
@@ -271,9 +271,9 @@ bool StunAttrXorPeerAddress::storeToData() {
     StunAttribute::storeHeader();
     if (_addr.ss_family == AF_INET) {
         // Set first byte to 0.
-        Utils::Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 0, 0);
+        Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 0, 0);
         // Set inet family.
-        Utils::Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 1, 0x01);
+        Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 1, 0x01);
         auto attrValue = (uint8_t*)_data->data() + ATTR_HEADER_SIZE;
         // Set port and XOR it.
         std::memcpy(attrValue + 2, &(reinterpret_cast<const sockaddr_in*>(&_addr))->sin_port, 2);
@@ -288,9 +288,9 @@ bool StunAttrXorPeerAddress::storeToData() {
         attrValue[7] ^= StunPacket::_magicCookie[3];
     } else if (_addr.ss_family == AF_INET6) {
         // Set first byte to 0.
-        Utils::Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 0, 0);
+        Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 0, 0);
         // Set inet family.
-        Utils::Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 1, 0x02);
+        Byte::Set1Byte((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 1, 0x02);
         auto attrValue = (uint8_t*)_data->data() + ATTR_HEADER_SIZE;
         std::memcpy( attrValue + 2, &(reinterpret_cast<const sockaddr_in6*>(&_addr))->sin6_port, 2);
         attrValue[2] ^= StunPacket::_magicCookie[0];
@@ -359,27 +359,27 @@ bool StunAttrNonce::storeToData() {
 
 bool StunAttrRequestedTransport::loadFromData(const uint8_t *buf, size_t len) {
     StunAttribute::loadHeader(buf);
-    _protocol = (Protocol)Utils::Byte::Get1Byte(buf + ATTR_HEADER_SIZE, 0);
+    _protocol = (Protocol)Byte::Get1Byte(buf + ATTR_HEADER_SIZE, 0);
     return true;
 }
 
 bool StunAttrRequestedTransport::storeToData() {
     _content_length = 4;
     StunAttribute::storeHeader();
-    Utils::Byte::Set1Byte((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 0, (uint8_t)_protocol);
+    Byte::Set1Byte((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 0, (uint8_t)_protocol);
     return true;
 }
 
 bool StunAttrPriority::loadFromData(const uint8_t *buf, size_t len) {
     StunAttribute::loadHeader(buf);
-    _priority = Utils::Byte::Get4Bytes(buf + ATTR_HEADER_SIZE, 0); 
+    _priority = Byte::Get4Bytes(buf + ATTR_HEADER_SIZE, 0); 
     return true;
 }
 
 bool StunAttrPriority::storeToData() {
     _content_length = 4;
     StunAttribute::storeHeader();
-    Utils::Byte::Set4Bytes((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 0, _priority);
+    Byte::Set4Bytes((uint8_t*)_data->data() + ATTR_HEADER_SIZE, 0, _priority);
     return true;
 }
 
@@ -396,40 +396,40 @@ bool StunAttrUseCandidate::storeToData() {
 
 bool StunAttrFingerprint::loadFromData(const uint8_t *buf, size_t len) {
     StunAttribute::loadHeader(buf);
-    _fingerprint = Utils::Byte::Get4Bytes(buf + ATTR_HEADER_SIZE, 0);
+    _fingerprint = Byte::Get4Bytes(buf + ATTR_HEADER_SIZE, 0);
     return true;
 }
 
 bool StunAttrFingerprint::storeToData() {
     _content_length = 4;
     StunAttribute::storeHeader();
-    Utils::Byte::Set4Bytes((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 0, _fingerprint);
+    Byte::Set4Bytes((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 0, _fingerprint);
     return true;
 }
 
 bool StunAttrIceControlled::loadFromData(const uint8_t *buf, size_t len) {
     StunAttribute::loadHeader(buf);
-    _tiebreaker = Utils::Byte::Get8Bytes(buf + ATTR_HEADER_SIZE, 0);
+    _tiebreaker = Byte::Get8Bytes(buf + ATTR_HEADER_SIZE, 0);
     return true;
 }
 
 bool StunAttrIceControlled::storeToData() {
     _content_length = 8;
     StunAttribute::storeHeader();
-    Utils::Byte::Set8Bytes((uint8_t*)_data->data(), ATTR_HEADER_SIZE, _tiebreaker);
+    Byte::Set8Bytes((uint8_t*)_data->data(), ATTR_HEADER_SIZE, _tiebreaker);
     return true;
 }
 
 bool StunAttrIceControlling::loadFromData(const uint8_t *buf, size_t len) {
     StunAttribute::loadHeader(buf);
-    _tiebreaker = Utils::Byte::Get8Bytes(buf + ATTR_HEADER_SIZE, 0);
+    _tiebreaker = Byte::Get8Bytes(buf + ATTR_HEADER_SIZE, 0);
     return true;
 }
 
 bool StunAttrIceControlling::storeToData() {
     _content_length = 8;
     StunAttribute::storeHeader();
-    Utils::Byte::Set8Bytes((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 0, _tiebreaker);
+    Byte::Set8Bytes((uint8_t*)(_data->data()) + ATTR_HEADER_SIZE, 0, _tiebreaker);
     return true;
 }
 
@@ -471,12 +471,12 @@ bool StunPacket::isStun(const uint8_t* data, size_t len) {
   the class.
 */
 StunPacket::Class StunPacket::getClass(const uint8_t* data, size_t len) {
-    uint16_t msgType = Utils::Byte::Get2Bytes(data, 0);
+    uint16_t msgType = Byte::Get2Bytes(data, 0);
     return  StunPacket::Class(((data[0] & 0x01) << 1) | ((data[1] & 0x10) >> 4));
 }
 
 StunPacket::Method StunPacket::getMethod(const uint8_t* data, size_t len) {
-    uint16_t msgType = Utils::Byte::Get2Bytes(data, 0);
+    uint16_t msgType = Byte::Get2Bytes(data, 0);
     return  StunPacket::Method((msgType & 0x000f) | ((msgType & 0x00e0) >> 1) | ((msgType & 0x3E00) >> 2));
 }
 
@@ -488,7 +488,7 @@ StunPacket::Ptr StunPacket::parse(const uint8_t* data, size_t len) {
     }
 
     // Get length field.
-    uint16_t msgLength = Utils::Byte::Get2Bytes(data, 2);
+    uint16_t msgLength = Byte::Get2Bytes(data, 2);
 
     // length field must be total size minus header's 20 bytes, and must be multiple of 4 Bytes.
     if ((static_cast<size_t>(msgLength) != len - 20) || ((msgLength & 0x03) != 0)) {
@@ -628,7 +628,7 @@ StunPacket::Authentication StunPacket::checkAuthentication(const std::string& uf
         // so the header length field must be modified (and later restored).
         if (hasAttribute(StunAttribute::Type::FINGERPRINT)) {
             // Set the header length field: full size - header length (20) - FINGERPRINT length (8).
-            Utils::Byte::Set2Bytes((uint8_t*)_data->data(), 2, _data->size() - HEADER_SIZE - 8);
+            Byte::Set2Bytes((uint8_t*)_data->data(), 2, _data->size() - HEADER_SIZE - 8);
         }
 
         auto attr_realm = dynamic_pointer_cast<StunAttrRealm>(getAttribute(StunAttribute::Type::REALM));
@@ -669,7 +669,7 @@ StunPacket::Authentication StunPacket::checkAuthentication(const std::string& uf
 
         // Restore the header length field.
         if (hasAttribute(StunAttribute::Type::FINGERPRINT)) {
-            Utils::Byte::Set2Bytes((uint8_t*)_data->data(), 2, _data->size() - HEADER_SIZE);
+            Byte::Set2Bytes((uint8_t*)_data->data(), 2, _data->size() - HEADER_SIZE);
         }
     }
 
@@ -720,9 +720,9 @@ void StunPacket::serialize() {
     typeField |= (static_cast<uint16_t>(_klass) & 0x01) << 4;
 
     // Set type field.
-    Utils::Byte::Set2Bytes((unsigned char*)_data->data(), 0, typeField);
+    Byte::Set2Bytes((unsigned char*)_data->data(), 0, typeField);
     // Set length field. not including the 20-byte STUN header
-    Utils::Byte::Set2Bytes((unsigned char*)_data->data(), 2, static_cast<uint16_t>(attr_size + message_integrity_size));
+    Byte::Set2Bytes((unsigned char*)_data->data(), 2, static_cast<uint16_t>(attr_size + message_integrity_size));
     // Set magic cookie.
     std::memcpy((unsigned char*)_data->data() + 4, StunPacket::_magicCookie, 4);
     // Set TransactionId field.
@@ -774,7 +774,7 @@ void StunPacket::serialize() {
     if (fingerprint_size) {
         // Add FINGERPRINT.
         // Compute the CRC32 of the packet up to (but excluding) the FINGERPRINT
-        Utils::Byte::Set2Bytes((unsigned char*)_data->data(), 2, static_cast<uint16_t>(attr_size + message_integrity_size + fingerprint_size));
+        Byte::Set2Bytes((unsigned char*)_data->data(), 2, static_cast<uint16_t>(attr_size + message_integrity_size + fingerprint_size));
         uint32_t computedFingerprint = getCRC32((unsigned char*)_data->data(), HEADER_SIZE + attr_size + message_integrity_size) ^ 0x5354554e;
         auto attr_fingerprint = std::make_shared<StunAttrFingerprint>();
         attr_fingerprint->setFingerprint(computedFingerprint);
@@ -845,9 +845,9 @@ bool StunPacket::loadAttrMessage(const uint8_t *buf, size_t len) {
     uint16_t length;
     StunAttribute::Ptr attr = nullptr;
     while (ptr < buf + len) {
-        auto type = (StunAttribute::Type)Utils::Byte::Get2Bytes(ptr, 0);
-        size_t length = Utils::Byte::Get2Bytes(ptr, 2);
-        size_t lengthAlign =  Utils::Byte::PadTo4Bytes((uint16_t)length);
+        auto type = (StunAttribute::Type)Byte::Get2Bytes(ptr, 0);
+        size_t length = Byte::Get2Bytes(ptr, 2);
+        size_t lengthAlign = Byte::PadTo4Bytes((uint16_t)length);
 
         switch (type) {
             case StunAttribute::Type::MAPPED_ADDRESS:

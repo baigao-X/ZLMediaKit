@@ -20,9 +20,9 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #define MS_RTC_ICE_SERVER_HPP
 
 #include "StunPacket.hpp"
+#include "Util/Byte.hpp"
 #include "Network/Session.h"
 #include "logger.h"
-#include "Utils.hpp"
 #include <list>
 #include <string>
 #include <functional>

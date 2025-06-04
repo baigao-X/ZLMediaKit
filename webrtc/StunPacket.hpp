@@ -21,7 +21,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 #include "logger.h"
-#include "Utils.hpp"
+#include "Util/Byte.hpp"
 #include "Network/Buffer.h"
 #include "Network/sockutil.h"
 #include <string>
