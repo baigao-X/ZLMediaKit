@@ -87,7 +87,7 @@ PlayerBase::Ptr PlayerBase::createPlayer(const EventPoller::Ptr &in_poller, cons
     }
 #endif//ENABLE_SRT
 #ifdef ENABLE_WEBRTC
-    if (strcasecmp("webrtc", prefix.data()) == 0) {
+    if ((strcasecmp("webrtc", prefix.data()) == 0 || strcasecmp("webrtcs", prefix.data()) == 0)) {
         return PlayerBase::Ptr(new WebRtcProxyPlayerImp(poller), release_func);
     }
 #endif//ENABLE_WEBRTC

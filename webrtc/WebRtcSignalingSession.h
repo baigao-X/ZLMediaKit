@@ -20,6 +20,7 @@ namespace mediakit {
 
 using namespace toolkit;
 
+// webrtc 信令, 基于websocket实现
 class WebRtcSignalingSession : public Session {
 public:
     struct ClassMethodHash {
@@ -33,13 +34,13 @@ public:
 
     using Ptr = std::shared_ptr<WebRtcSignalingSession>;
     using WeakPtr = std::weak_ptr<WebRtcSignalingSession>;
+
     WebRtcSignalingSession(const Socket::Ptr &sock);
     virtual ~WebRtcSignalingSession();
 
     Json::Value makeInfoJson();
-    std::string getRoomId() {
-        return _room_id;
-    };
+
+    std::string getRoomId() { return _room_id; };
 
     //// Session override////
     void onRecv(const Buffer::Ptr &) override;
@@ -51,7 +52,7 @@ protected:
     void handleUnregisterRequest(SIGNALING_MSG_ARGS);
     void handleCallRequest(SIGNALING_MSG_ARGS);
     void handleCallAccept(SIGNALING_MSG_ARGS);
-#define handleCallRefuses handleCallAccept
+    #define handleCallRefuses handleCallAccept
     void handleByeIndication(SIGNALING_MSG_ARGS);
     void handleCandidateIndication(SIGNALING_MSG_ARGS);
     void handleOtherMsg(SIGNALING_MSG_ARGS);
@@ -71,10 +72,9 @@ protected:
     void sendPacket(const Json::Value &body);
 
 private:
-    std::string _room_id;
+    std::string _room_id; //
     std::unordered_map<std::string /*guest id*/, std::string /*peer_room_id*/> _tours;  //作为主叫
     std::unordered_map<std::string /*peer_guest_id*/, WebRtcSignalingSession::WeakPtr /*session*/> _guests; //作为被叫
-
 };
 
 using WebRtcWebcosktSignalingSession = WebSocketSession<WebRtcSignalingSession>;

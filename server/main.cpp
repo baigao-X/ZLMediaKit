@@ -443,10 +443,10 @@ int start_main(int argc,char *argv[]) {
 
             if (rtcTcpPort) { rtcSrv_tcp->start<WebRtcSession>(rtcTcpPort, listen_ip);}
 
-            //webrtc 信令服务器
+            // webrtc 信令服务器
             if (signalingPort) { signaleSrv->start<WebRtcWebcosktSignalingSession>(signalingPort);}
 
-            //STUN/TURN服务
+            // STUN/TURN 服务
             if (icePort) { iceSrv->start<IceSession>(icePort);}
  
 #endif//defined(ENABLE_WEBRTC)
@@ -510,5 +510,3 @@ int main(int argc,char *argv[]) {
     return start_main(argc,argv);
 }
 #endif //DISABLE_MAIN
-
-

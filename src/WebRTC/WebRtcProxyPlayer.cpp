@@ -133,4 +133,3 @@ void WebRtcProxyPlayerImp::addTrackCompleted() {
 }
 
 } /* namespace mediakit */
-

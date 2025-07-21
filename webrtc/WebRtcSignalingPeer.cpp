@@ -56,6 +56,7 @@ void delWebrtcRoomKeeper(const std::string &key, const std::function<void(const 
         return cb(SockException(Err_other, "room_key not exist"));
     }
     peer->unregist(cb);
+    s_room_keepers.erase(key);
     return;
 }
 
@@ -77,6 +78,7 @@ WebRtcSignalingPeer::Ptr getWebrtcRoomKeeper(const string &host, uint16_t port) 
 WebRtcSignalingPeer::WebRtcSignalingPeer(const std::string &host, uint16_t port, const std::string& room_id, const EventPoller::Ptr &poller) 
 : WebSocketClient<TcpClient>(poller), _room_id(room_id) {
     TraceL;
+    //TODO: not support wss now
     _ws_url = StrPrinter << "ws://" + host << ":" << port << "/signaling";
     _room_key = getRoomKeepersKey(host, port);
 }
@@ -308,6 +310,14 @@ void WebRtcSignalingPeer::handleRegisterAccept(SIGNALING_MSG_ARGS) {
         return;
     }
 
+    if (ice_servers.empty()) {
+        _StrPrinter msg;
+        msg << "no ice server found in \"" << ICE_SERVERS_KEY << "\" point";
+        WarnL << msg;
+        trigger(SockException(Err_other, msg), getRoomKey());
+        return;
+    }
+
     for (auto ice_server: ice_servers) {
         //only support 1 ice_server now
         auto url = ice_server[URL_KEY].asString();
@@ -339,8 +349,6 @@ void WebRtcSignalingPeer::sendUnregisterRequest(ResponseTrigger trigger) {
     Json::Value body;
     body[CLASS_KEY]   = CLASS_VALUE_REQUEST;
     body[METHOD_KEY]  = METHOD_VALUE_UNREGISTER;
-    body[ROOM_ID_KEY] = getRoomId();
-    sendRequest(body, trigger);
     return;
 }
 
@@ -715,5 +723,3 @@ void WebRtcSignalingPeer::checkResponseExpire() {
 }
 
 }// namespace mediakit
-
-

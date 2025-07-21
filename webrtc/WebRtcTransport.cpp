@@ -60,12 +60,13 @@ const string kTcpPort = RTC_FIELD "tcpPort";
 const string kSignalingPort = RTC_FIELD "signalingPort";
 // webrtc iceServer udp server
 const string kIcePort = RTC_FIELD "icePort";
-// webrtc enabel turn
+// webrtc enable turn or only enable stun
 const string kEnableTurn = RTC_FIELD "enableTurn";
-const string kLocalOnlyRelayed = RTC_FIELD "localOnlyRelayed";
-const string kRemoteOnlyRelayed = RTC_FIELD "remoteOnlyRelayed";
+// webrtc ice ufrag and pwd  [AUTO-TRANSLATED:2f0d1b3c]
 const string kIceUfrag = RTC_FIELD "iceUfrag";
 const string kIcePwd = RTC_FIELD "icePwd";
+const string kLocalOnlyRelayed = RTC_FIELD "localOnlyRelayed";
+const string kRemoteOnlyRelayed = RTC_FIELD "remoteOnlyRelayed";
 
 // 比特率设置  [AUTO-TRANSLATED:2c75f5bc]
 // Bitrate setting
@@ -583,9 +584,6 @@ std::string WebRtcTransport::createOfferSdp() {
         RtcConfigure configure;
         onRtcConfigure(configure);
         _offer_sdp = configure.createOffer();
-//FIXME:
-        // onCheckSdp(SdpType::offer, *_offer_sdp);
-        // _offer_sdp->checkValid();
         return _offer_sdp->toString();
     } catch (exception &ex) {
         onShutdown(SockException(Err_shutdown, ex.what()));
@@ -594,7 +592,6 @@ std::string WebRtcTransport::createOfferSdp() {
 }
 
 std::string WebRtcTransport::getAnswerSdp(const string &offer) {
-    DebugL;
     try {
         // // 解析offer sdp ////  [AUTO-TRANSLATED:87c1f337]
         // // Parse offer sdp ////
@@ -623,7 +620,6 @@ std::string WebRtcTransport::getAnswerSdp(const string &offer) {
 }
 
 void WebRtcTransport::setAnswerSdp(const std::string &answer) {
-    DebugL;
     try {
         _answer_sdp = std::make_shared<RtcSession>();
         _answer_sdp->loadFrom(answer);

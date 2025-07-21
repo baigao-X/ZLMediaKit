@@ -63,6 +63,7 @@ public:
     virtual ~WebRtcClient();
 
     const toolkit::EventPoller::Ptr &getPoller() const {return _poller;}
+    void setPoller(const toolkit::EventPoller::Ptr &poller)  {_poller = poller;};
 
 protected:
     virtual bool isPlayer() = 0;
@@ -92,12 +93,12 @@ protected:
     toolkit::EventPoller::Ptr _poller;
 
     //for _negotiate_sdp
-    HttpRequester::Ptr _negotiate;
-    WebRtcTransport::Ptr _transport;
+    HttpRequester::Ptr _negotiate = nullptr;
+    WebRtcTransport::Ptr _transport = nullptr;
     bool _is_negotiate_finished = false;
 
     //for candidate
-    WebRtcSignalingPeer::Ptr _peer;
+    WebRtcSignalingPeer::Ptr _peer = nullptr;
 private:
     std::map<std::string /*candidate key*/, SocketHelper::Ptr> _socket_map;
 };

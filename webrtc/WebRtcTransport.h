@@ -144,6 +144,7 @@ public:
     void sendDatachannel(uint16_t streamId, uint32_t ppid, const char *msg, size_t len);
 
     const EventPoller::Ptr& getPoller() const {return _poller;};
+    void setPoller(const EventPoller::Ptr &poller)  {_poller = poller;};
     
     Session::Ptr getSession() const;
 

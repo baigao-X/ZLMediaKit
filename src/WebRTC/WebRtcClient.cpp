@@ -21,11 +21,11 @@ using namespace std;
 
 namespace mediakit {
 
-//whep/weip:
-//webrtc://host:port/live/test
-//
-//websocket
-//webrtc://{{signaling_server_host}}:{{signaling_server_port}}/live/test?room_id={{peer_room_id}}
+// # WebRTCUrl format
+// ## whep/weip over http sfu: webrtc://server_host:server_port/{{app}}/{{streamid}}
+// ## whep/weip over https sfu: webrtcs://server_host:server_port/{{app}}/{{streamid}}
+// ## websocket p2p: webrtc://{{signaling_server_host}}:{{signaling_server_port}}/{{app}}/{{streamid}}?room_id={{peer_room_id}}
+// ## websockets p2p: webrtcs://{{signaling_server_host}}:{{signaling_server_port}}/{{app}}/{{streamid}}?room_id={{peer_room_id}}
 void WebRTCUrl::parse(const string &strUrl, bool isPlayer) {
     DebugL << "url: " << strUrl;
     _full_url = strUrl;
@@ -109,7 +109,7 @@ WebRtcClient::WebRtcClient(const toolkit::EventPoller::Ptr &poller) {
 }
 
 WebRtcClient::~WebRtcClient(void) {
-    checkOut();
+    doBye();
     DebugL;
 }
 
@@ -127,7 +127,9 @@ void WebRtcClient::connectivityChecks() {
 void WebRtcClient::onNegotiateFinish() {
     DebugL;
     _is_negotiate_finished = true;
-    gatheringCandidates(_peer->getIceServer());
+    if (WebRtcTransport::SignalingProtocols::WEBSOCKET == _url._signaling_protocols) {
+        gatheringCandidates(_peer->getIceServer());
+    }
     return;
 }
 
@@ -183,15 +185,17 @@ void WebRtcClient::doNegotiateWhepOrWhip() {
 
 void WebRtcClient::doNegotiateWebsocket() {
     DebugL;
+
+#if 0
+    //TODO: 当前暂将每一路呼叫都使用一个独立的peer_connection,不复用
     _peer = getWebrtcRoomKeeper(_url._host, _url._port);
     if (_peer) {
-        //Progressive Candidates 渐进性候选,便于快速建立
         checkIn();
         return;
     }
+#endif
 
     //未注册的,先增加注册流程，并在此次播放结束后注销
-    // throw std::invalid_argument(StrPrinter << "please register to signaling server " << _url._host << "::" << _url._port << " first");
     InfoL << (StrPrinter << "register to signaling server " << _url._host << "::" << _url._port << " first");
     auto room_id = "ringing_" + makeRandStr(16);
     _peer = make_shared<WebRtcSignalingPeer>(_url._host, _url._port, room_id);
@@ -237,6 +241,7 @@ void WebRtcClient::checkIn() {
        strong_self->onNegotiateFinish();
        return true;
     }, getTimeOutSec());
+    return;
 }
 
 void WebRtcClient::checkOut() {
@@ -244,11 +249,14 @@ void WebRtcClient::checkOut() {
     auto tuple = MediaTuple(_url._vhost, _url._app, _url._stream);
     if (_peer) {
         _peer->checkOut(_url._peer_room_id);
+        _peer->unregist([](const SockException &ex){});
     }
+    return;
 }
 
 void WebRtcClient::candidate(const std::string& candidate, const std::string& ufrag, const std::string pwd) {
     _peer->candidate(_transport->getIdentifier(), candidate, ufrag, pwd);
+    return;
 }
 
 void WebRtcClient::gatheringCandidates(IceServerInfo::Ptr ice_server) {
@@ -262,23 +270,49 @@ void WebRtcClient::gatheringCandidates(IceServerInfo::Ptr ice_server) {
         }
         strong_self->candidate(candidate, ufrag, pwd);
     });
+    return;
 }
 
 void WebRtcClient::doBye() {
     DebugL;
+    if (!_is_negotiate_finished) {
+        return;
+    }
+
     switch (_url._signaling_protocols) {
         case WebRtcTransport::SignalingProtocols::WHEP_WHIP: return doByeWhepOrWhip();
         case WebRtcTransport::SignalingProtocols::WEBSOCKET: return doByeWebsocket();
         default: throw std::invalid_argument(StrPrinter << "not support signaling_protocols: " << (int)_url._signaling_protocols);
     }
+    _is_negotiate_finished = false;
     return;
 }
+
 void WebRtcClient::doByeWhepOrWhip() {
-    TODO:
+    DebugL;
+    if (!_negotiate) {
+        return;
+    }
+    _negotiate->setMethod("DELETE");
+    _negotiate->setBody("");
+    _negotiate->startRequester(_url._negotiate_url, [](const toolkit::SockException &ex, const Parser &response) {
+        if (ex) {
+            WarnL << "network err:" << ex.getErrCode() << " " << ex.what();
+            return false;
+        }
+        DebugL << "status:" << response.status();
+        return true;
+    }, getTimeOutSec());
+    return;
 }
 
 void WebRtcClient::doByeWebsocket() {
-    TODO:
+    DebugL;
+    if (!_peer) {
+        return;
+    }
+    checkOut();
+    return;
 }
 
 void WebRtcClient::onResult(const SockException &ex) {
@@ -290,7 +324,7 @@ void WebRtcClient::onResult(const SockException &ex) {
             return;
         }
 
-        void doBye();
+        doBye();
     }
     return;
 }
@@ -305,4 +339,3 @@ float WebRtcClient::getTimeOutSec() {
 };
 
 } /* namespace mediakit */
-

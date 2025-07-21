@@ -21,6 +21,7 @@ namespace mediakit {
 
 
 //注册上来的peer列表
+static std::atomic<uint32_t> s_room_idx_generate { 1 };
 static ServiceController<WebRtcSignalingSession> s_rooms;
 
 void listWebrtcRooms(const std::function<void(const std::string& key, const WebRtcSignalingSession::Ptr& p)> &cb) {
@@ -55,7 +56,6 @@ void WebRtcSignalingSession::onRecv(const Buffer::Ptr &buffer) {
     reader.parse(buffer->data(), args);
     Parser parser;
     HttpAllArgs<decltype(args)> allArgs(parser, args);
-    CHECK_ARGS(CLASS_KEY, METHOD_KEY, TRANSACTION_ID_KEY);
 
     using MsgHandler = void (WebRtcSignalingSession::*)(SIGNALING_MSG_ARGS);
     static std::unordered_map<std::pair<std::string /*class*/, std::string /*method*/>, MsgHandler, ClassMethodHash> s_msg_handlers;
@@ -68,25 +68,27 @@ void WebRtcSignalingSession::onRecv(const Buffer::Ptr &buffer) {
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REFUSES, METHOD_VALUE_CALL), &WebRtcSignalingSession::handleCallRefuses);
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_INDICATION, METHOD_VALUE_BYE), &WebRtcSignalingSession::handleByeIndication);
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_INDICATION, METHOD_VALUE_CANDIDATE), &WebRtcSignalingSession::handleCandidateIndication);
-
-        //FIXME:DELETE
-        // s_msg_handlers.emplace(METHOD_VALUE_REFUSES, &WebRtcSignalingSession::handleRefuseMsg);
-
     });
 
-    auto it = s_msg_handlers.find(std::make_pair(allArgs[CLASS_KEY], allArgs[METHOD_KEY]));
-    if (it == s_msg_handlers.end()) {
-        WarnL << " not support class: "<< allArgs[CLASS_KEY] << ", method: " << allArgs[METHOD_KEY] << ", ignore";
-        return;
-    }
+    try {
+        CHECK_ARGS(CLASS_KEY, METHOD_KEY, TRANSACTION_ID_KEY);
+        auto it = s_msg_handlers.find(std::make_pair(allArgs[CLASS_KEY], allArgs[METHOD_KEY]));
+        if (it == s_msg_handlers.end()) {
+            WarnL << " not support class: "<< allArgs[CLASS_KEY] << ", method: " << allArgs[METHOD_KEY] << ", ignore";
+            return;
+        }
 
-    return (this->*(it->second))(allArgs);
+        (this->*(it->second))(allArgs);
+    } catch (std::exception &ex) {
+        ErrorL << "process msg fail: " << ex.what();
+    }
+    return;
 }
 
 void WebRtcSignalingSession::onError(const SockException &err) {
     WarnL << "room_id: " << _room_id;
     s_rooms.erase(_room_id);
-    //除非对端显式的发送了注销执行,否则因为网络异常导致的会话中断，不影响已经进行通信的webrtc会话,仅作移除
+    //除非对端显式的发送了注销执行,否则因为网络异常导致的会话中断，不中断正在拉流或推流的中webrtc会话,仅作移除
     return;
 }
 
@@ -98,17 +100,27 @@ void WebRtcSignalingSession::onManager() {
 void WebRtcSignalingSession::handleRegisterRequest(SIGNALING_MSG_ARGS) {
     DebugL;
 
-    CHECK_ARGS(ROOM_ID_KEY);
+    std::string room_id;
     Json::Value body;
     body[METHOD_KEY] = METHOD_VALUE_REGISTER;
-    body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
 
-    if (s_rooms.find(allArgs[ROOM_ID_KEY])) {
-        //已经注册了
-        sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "alreadly register");
-        return;
+    // 如果客户端没有提供 room_id，服务端自动分配一个
+    if (allArgs[ROOM_ID_KEY].empty()) {
+        auto idx = s_room_idx_generate.fetch_add(1);
+        room_id = std::to_string(idx) + "_" + makeRandStr(16);
+        DebugL << "auto generated room_id: " << room_id;
+    } else {
+        room_id = allArgs[ROOM_ID_KEY];
+        if (s_rooms.find(room_id)) {
+            //已经注册了
+            body[ROOM_ID_KEY] = room_id;
+            return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "room id conflict");
+        }
     }
-    _room_id = allArgs[ROOM_ID_KEY];
+    
+    body[ROOM_ID_KEY] = room_id;
+
+    _room_id = room_id;
     s_rooms.emplace(_room_id, shared_from_this());
     sendRegisterAccept(body, allArgs[TRANSACTION_ID_KEY]);
     return;
@@ -122,9 +134,13 @@ void WebRtcSignalingSession::handleUnregisterRequest(SIGNALING_MSG_ARGS) {
     body[METHOD_KEY] = METHOD_VALUE_UNREGISTER;
     body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
 
+    if (_room_id.empty()) {
+        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "unregistered");
+    }
+
     if (allArgs[ROOM_ID_KEY] != getRoomId()) {
-        sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], StrPrinter << "room_id: \"" << allArgs[ROOM_ID_KEY] << "\" not match room_id:" << getRoomId());
-        return;
+        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], 
+            StrPrinter << "room_id: \"" << allArgs[ROOM_ID_KEY] << "\" not match room_id:" << getRoomId());
     }
 
     sendAcceptResponse(body, allArgs[TRANSACTION_ID_KEY]);
@@ -140,13 +156,19 @@ void WebRtcSignalingSession::handleUnregisterRequest(SIGNALING_MSG_ARGS) {
 
 void WebRtcSignalingSession::handleCallRequest(SIGNALING_MSG_ARGS) {
     DebugL;
-    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, TYPE_KEY, SDP_KEY);
+    CHECK_ARGS(TRANSACTION_ID_KEY, GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, TYPE_KEY, SDP_KEY);
+
+    Json::Value body;
+    body[METHOD_KEY] = METHOD_VALUE_CALL;
+    body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
+
+    if (_room_id.empty()) {
+        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
+    }
 
     auto session = getWebrtcRoomKeeper(allArgs[ROOM_ID_KEY]);
     if (!session) {
-        Json::Value body;
-        sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], StrPrinter << "room_id: \"" << allArgs[ROOM_ID_KEY] << "\" not register");
-        return;
+        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], StrPrinter << "room_id: \"" << allArgs[ROOM_ID_KEY] << "\" unregistered");
     }
     _tours.emplace(allArgs[GUEST_ID_KEY], allArgs[ROOM_ID_KEY]);
 
@@ -161,6 +183,11 @@ void WebRtcSignalingSession::handleCallAccept(SIGNALING_MSG_ARGS) {
     CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, SDP_KEY);
 
     Json::Value body;
+    body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
+
+    if (_room_id.empty()) {
+        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
+    }
 
     auto it = _guests.find(allArgs[GUEST_ID_KEY]);
     if (it == _guests.end()) {
@@ -180,6 +207,15 @@ void WebRtcSignalingSession::handleCallAccept(SIGNALING_MSG_ARGS) {
 void WebRtcSignalingSession::handleByeIndication(SIGNALING_MSG_ARGS) {
     DebugL;
     CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY);
+
+    Json::Value body;
+    body[METHOD_KEY] = METHOD_VALUE_BYE;
+    body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
+
+    if (_room_id.empty()) {
+        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
+    }
+
     if (allArgs[ROOM_ID_KEY] == getRoomId()) {
         //作为被叫方,接收bye
         auto it = _guests.find(allArgs[GUEST_ID_KEY]);
@@ -212,6 +248,15 @@ void WebRtcSignalingSession::handleByeIndication(SIGNALING_MSG_ARGS) {
 void WebRtcSignalingSession::handleCandidateIndication(SIGNALING_MSG_ARGS) {
     DebugL;
     CHECK_ARGS(TRANSACTION_ID_KEY, GUEST_ID_KEY, ROOM_ID_KEY, ICE_KEY, UFRAG_KEY, PWD_KEY);
+
+    Json::Value body;
+    body[METHOD_KEY] = METHOD_VALUE_CANDIDATE;
+    body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
+
+    if (_room_id.empty()) {
+        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
+    }
+
     return handleOtherMsg(allArgs);
 }
 
@@ -241,7 +286,6 @@ void WebRtcSignalingSession::handleOtherMsg(SIGNALING_MSG_ARGS) {
         }
         session->forwardPacket(allArgs);
     }
-    DebugL << "debug 111";
     return;
 }
 
@@ -350,24 +394,30 @@ void WebRtcSignalingSession::sendRegisterAccept(Json::Value& body, const std::st
         return ret;
     });
 
+    //如果配置了extern_ips, 则选择第一个作为turn服务器的ip
+    //如果没配置获取网卡接口
     std::string extern_ip;
-    if (extern_ips.empty()) {
-        extern_ip = SockUtil::get_local_ip();
-    } else {
+    if (!extern_ips.empty()) {
         extern_ip = extern_ips.front();
+    } else {
+        extern_ip = SockUtil::get_local_ip();
     }
 
-    //FIXME: process multi exterm ip
+    //TODO: support multi extern ip
+    //TODO: support third stun/turn server
 
     std::string url;
-    //turns:host:port?transport=udp
-    //turns:host:port?transport=tcp
-    //turn:host:port?transport=udp
-    //turn:host:port?transport=tcp
-    //stuns:host:port?transport=udp
-    //stuns:host:port?transport=udp
-    //stun:host:port?transport=tcp
-    //stun:host:port?transport=tcp
+    // SUPPORT: 
+    // stun:host:port?transport=udp
+    // turn:host:port?transport=udp
+    
+    // NOT SUPPORT NOW TODO: 
+    // turns:host:port?transport=udp
+    // turn:host:port?transport=tcp
+    // turns:host:port?transport=tcp
+    // stuns:host:port?transport=udp
+    // stuns:host:port?transport=udp
+    // stun:host:port?transport=tcp
     if (enable_turn) {
         url = "turn:" + extern_ip + ":" + std::to_string(icePort) + "?transport=udp";
     } else {
@@ -385,33 +435,33 @@ void WebRtcSignalingSession::sendRegisterAccept(Json::Value& body, const std::st
 
     body[ICE_SERVERS_KEY] = ice_servers;
 
-    //TODO: support multi ice server
-    sendAcceptResponse(body, transaction_id);
+    return sendAcceptResponse(body, transaction_id);
 }
 
 void WebRtcSignalingSession::sendAcceptResponse(Json::Value &body, const std::string& transaction_id) {
     DebugL;
     body[CLASS_KEY] = CLASS_VALUE_ACCEPT;
-    sendResponse(body, transaction_id);
+    return sendResponse(body, transaction_id);
 }
 
 void WebRtcSignalingSession::sendRefusesResponse(Json::Value &body, const std::string& transaction_id, const std::string& reason) {
     DebugL;
     body[CLASS_KEY] = CLASS_VALUE_REFUSES;
     body[REASON_KEY] = reason;
-    sendResponse(body, transaction_id);
+    return sendResponse(body, transaction_id);
 }
 
 void WebRtcSignalingSession::sendResponse(Json::Value &body, const std::string& transaction_id) {
     DebugL;
     body[TRANSACTION_ID_KEY] = transaction_id;
-    sendPacket(body);
+    return sendPacket(body);
 }
 
 void WebRtcSignalingSession::sendPacket(const Json::Value &body) {
     auto msg = body.toStyledString();
     TraceL << "send msg: " << msg;
     SockSender::send(msg);
+    return;
 }
 
 Json::Value WebRtcSignalingSession::makeInfoJson() {
@@ -440,4 +490,3 @@ Json::Value WebRtcSignalingSession::makeInfoJson() {
 }
 
 }// namespace mediakit
-
