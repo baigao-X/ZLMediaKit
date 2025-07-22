@@ -127,6 +127,16 @@ public:
         && (_type == rhs._type) && (_priority == rhs._priority)
         && (_transport == rhs._transport) && (_secure == rhs._secure));
     }
+    std::string getAddressTypeStr() {
+        switch (_type) {
+            case AddressType::HOST: return "host";
+            case AddressType::SRFLX: return "srflx";
+            case AddressType::PRFLX: return "reflx";
+            case AddressType::RELAY: return "relay";
+            default: break;
+        }
+        return "invalid";
+    }
 
 public:
     AddressType _type = AddressType::HOST;
@@ -162,7 +172,11 @@ public:
 
         Pair() = default;
         Pair(toolkit::SocketHelper::Ptr socket) : _socket(socket) {;}
-        Pair(toolkit::SocketHelper::Ptr socket, std::string peer_host, uint16_t peer_port, std::shared_ptr<sockaddr_storage> realyed_addr = nullptr) : _socket(socket), _peer_host(peer_host), _peer_port(peer_port), _realyed_addr(realyed_addr) {}
+        Pair(toolkit::SocketHelper::Ptr socket, std::string peer_host, uint16_t peer_port,
+             std::shared_ptr<sockaddr_storage> realyed_addr = nullptr) : 
+            _socket(socket), _peer_host(peer_host), _peer_port(peer_port), _realyed_addr(realyed_addr) {
+        }
+
         Pair(Pair &that) {
             // DebugL;
             _socket = that._socket;
@@ -270,29 +284,13 @@ public:
     IceTransport(Listener* listener, const std::string& ufrag, const std::string& password, const toolkit::EventPoller::Ptr &poller);
     virtual ~IceTransport() {}
 
-    const toolkit::EventPoller::Ptr& getPoller() const {
-        return _poller;
-    }
+    const toolkit::EventPoller::Ptr& getPoller() const { return _poller; }
+    const std::string& getIdentifier() const { return _identifier; }
 
-    const std::string& getIdentifier() const { 
-        return _identifier; 
-    }
-
-    const std::string& getUfrag() const { 
-        return _ufrag; 
-    }
-
-    const std::string& getPassword() const { 
-        return _password; 
-    }
-
-    void setUFrag(const std::string& ufrag) {
-        _ufrag = ufrag;
-    }
-
-    void setPassword(const std::string& password) {
-        _password = password;
-    }
+    const std::string& getUfrag() const { return _ufrag; }
+    const std::string& getPassword() const { return _password; }
+    void setUFrag(const std::string& ufrag) { _ufrag = ufrag; }
+    void setPassword(const std::string& password) { _password = password; }
 
     virtual bool processSocketData(const uint8_t* data, size_t len, Pair::Ptr pair);
     virtual void sendSocketData(toolkit::Buffer::Ptr buf, Pair::Ptr pair, bool flush = true);
@@ -395,6 +393,15 @@ public:
         Failed,             //所有候选地址检测失败,连接不可用
     };
 
+    static const char* stateToString(State state) {
+        switch (state) {
+            case State::Running: return "Running";
+            case State::Completed: return "Completed";
+            case State::Failed: return "Failed";
+            default: return "Unknown";
+        }
+    }
+
     enum class Role {
         Controlling = 1,
         Controlled,
@@ -405,7 +412,9 @@ public:
         Full,
     };
 
-    IceAgent(Listener* listener, Implementation implementation, Role role, const std::string& ufrag, const std::string& password, const toolkit::EventPoller::Ptr &poller);
+    IceAgent(Listener* listener, Implementation implementation, Role role, 
+             const std::string& ufrag, const std::string& password, 
+             const toolkit::EventPoller::Ptr &poller);
     virtual ~IceAgent() {}
 
     void gatheringCandidates(IceServerInfo::Ptr ice_server);
@@ -438,7 +447,7 @@ public:
     }
 
     void setState(IceAgent::State state) { 
-        InfoL << (uint32_t)state;
+        InfoL << stateToString(state);
         _state = state;
     }
 
@@ -501,7 +510,7 @@ protected:
     //for GATHERING_CANDIDATES
     using CandidateSet = std::unordered_set<CandidateInfo, CandidateTuple::ClassHash, CandidateTuple::ClassEqual>;
     CandidateSet _local_candidates;
-    std::vector<toolkit::SocketHelper::Ptr> _sockets;
+    std::vector<toolkit::SocketHelper::Ptr> _sockets; //local sockets
     bool _has_realyed_cnadidate = false;
 
     //for CONNECTIVITY_CHECKS

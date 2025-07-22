@@ -161,7 +161,11 @@ void WebRtcSignalingSession::handleCallRequest(SIGNALING_MSG_ARGS) {
     Json::Value body;
     body[METHOD_KEY] = METHOD_VALUE_CALL;
     body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
-
+    body[GUEST_ID_KEY] = allArgs[GUEST_ID_KEY];
+    body[VHOST_KEY] = allArgs[VHOST_KEY];
+    body[APP_KEY] = allArgs[APP_KEY];
+    body[STREAM_KEY] = allArgs[STREAM_KEY];
+    body[TYPE_KEY] = allArgs[TYPE_KEY];
     if (_room_id.empty()) {
         return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
     }

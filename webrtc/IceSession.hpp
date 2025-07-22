@@ -42,10 +42,6 @@ public:
 
 protected:
     IceServer::Ptr _ice_transport;
-
-
-private:
-
 };
 
 class IceSessionManager {

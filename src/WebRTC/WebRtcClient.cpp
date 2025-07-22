@@ -104,8 +104,8 @@ void WebRTCUrl::parse(const string &strUrl, bool isPlayer) {
 ////////////  WebRtcClient //////////////////////////
 
 WebRtcClient::WebRtcClient(const toolkit::EventPoller::Ptr &poller) {
-    _poller = poller ? std::move(poller) : EventPollerPool::Instance().getPoller();
     DebugL;
+    _poller = poller ? std::move(poller) : EventPollerPool::Instance().getPoller();
 }
 
 WebRtcClient::~WebRtcClient(void) {
@@ -281,7 +281,7 @@ void WebRtcClient::doBye() {
 
     switch (_url._signaling_protocols) {
         case WebRtcTransport::SignalingProtocols::WHEP_WHIP: return doByeWhepOrWhip();
-        case WebRtcTransport::SignalingProtocols::WEBSOCKET: return doByeWebsocket();
+        case WebRtcTransport::SignalingProtocols::WEBSOCKET: return checkOut();
         default: throw std::invalid_argument(StrPrinter << "not support signaling_protocols: " << (int)_url._signaling_protocols);
     }
     _is_negotiate_finished = false;
@@ -303,15 +303,6 @@ void WebRtcClient::doByeWhepOrWhip() {
         DebugL << "status:" << response.status();
         return true;
     }, getTimeOutSec());
-    return;
-}
-
-void WebRtcClient::doByeWebsocket() {
-    DebugL;
-    if (!_peer) {
-        return;
-    }
-    checkOut();
     return;
 }
 

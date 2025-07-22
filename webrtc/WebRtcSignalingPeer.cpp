@@ -161,19 +161,24 @@ void WebRtcSignalingPeer::processOffer(SIGNALING_MSG_ARGS, WebRtcInterface &tran
 
         std::weak_ptr<WebRtcSignalingPeer> weak_self = std::static_pointer_cast<WebRtcSignalingPeer>(shared_from_this());
         transport.gatheringCandidates(_ice_server, [weak_self](const std::string& transport_identifier, const std::string& candidate,
-                                                               const std::string& ufrag, const std::string pwd) {
-                                      auto strong_self = weak_self.lock();
-                                      if (!strong_self) {
-                                      return;
-                                      }
-                                      strong_self->candidate(transport_identifier, candidate, ufrag, pwd);
-                                      return;
-                                      });
+            const std::string& ufrag, const std::string pwd) 
+        {
+            auto strong_self = weak_self.lock();
+            if (!strong_self) {
+                return;
+            }
+            strong_self->candidate(transport_identifier, candidate, ufrag, pwd);
+            return;
+        });
     } catch (std::exception &ex) {
         Json::Value body;
         body[METHOD_KEY]   = allArgs[METHOD_KEY];
         body[ROOM_ID_KEY]  = allArgs[ROOM_ID_KEY];
         body[GUEST_ID_KEY] = allArgs[GUEST_ID_KEY];
+        body[VHOST_KEY] = allArgs[VHOST_KEY];
+        body[APP_KEY] = allArgs[APP_KEY];
+        body[STREAM_KEY] = allArgs[STREAM_KEY];
+        body[TYPE_KEY] = allArgs[TYPE_KEY];
         sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], ex.what());
     }
     return;
@@ -256,7 +261,6 @@ void WebRtcSignalingPeer::onError(const SockException &err) {
 
 bool WebRtcSignalingPeer::responseFilter(SIGNALING_MSG_ARGS, ResponseTrigger& trigger) {
     if (allArgs[CLASS_KEY] != CLASS_VALUE_ACCEPT && allArgs[CLASS_KEY] != CLASS_VALUE_REFUSES) {
-        DebugL << "debug 11";
         return false;
     }
 
@@ -296,7 +300,6 @@ void WebRtcSignalingPeer::handleRegisterAccept(SIGNALING_MSG_ARGS) {
     TraceL;
     ResponseTrigger trigger;
     if (!responseFilter(allArgs, trigger)) {
-        DebugL << "debug 12223";
         return;
     }
 
@@ -349,6 +352,8 @@ void WebRtcSignalingPeer::sendUnregisterRequest(ResponseTrigger trigger) {
     Json::Value body;
     body[CLASS_KEY]   = CLASS_VALUE_REQUEST;
     body[METHOD_KEY]  = METHOD_VALUE_UNREGISTER;
+    body[ROOM_ID_KEY] = _room_id;
+    sendRequest(body, trigger);
     return;
 }
 
@@ -366,7 +371,6 @@ void WebRtcSignalingPeer::handleUnregisterAccept(SIGNALING_MSG_ARGS) {
 void WebRtcSignalingPeer::handleUnregisterRefuses(SIGNALING_MSG_ARGS) {
     ResponseTrigger trigger;
     if (!responseFilter(allArgs, trigger)) {
-        DebugL << "debug 12223";
         return;
     }
 
@@ -405,13 +409,11 @@ void WebRtcSignalingPeer::sendCallAccept(const std::string& peer_guest_id, const
     body[STREAM_KEY]         = tuple.stream;
     body[SDP_KEY]            = sdp;
     sendPacket(body);
-    return;
-}
+    return; }
 
 void WebRtcSignalingPeer::handleCallRequest(SIGNALING_MSG_ARGS) {
     DebugL;
     CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, TYPE_KEY);
-    TraceL;
 
     if (allArgs[ROOM_ID_KEY] != getRoomId()) {
         WarnL << "target room_id: " << allArgs[ROOM_ID_KEY] << "mismatch our room_id: " << getRoomId();
@@ -421,14 +423,14 @@ void WebRtcSignalingPeer::handleCallRequest(SIGNALING_MSG_ARGS) {
     auto args = std::make_shared<WebRtcArgsImp<Json::Value>>(allArgs, allArgs[GUEST_ID_KEY]);
     std::weak_ptr<WebRtcSignalingPeer> weak_self = std::static_pointer_cast<WebRtcSignalingPeer>(shared_from_this());
     WebRtcPluginManager::Instance().negotiateSdp(*shared_from_this(), allArgs[TYPE_KEY], *args, 
-                                                 [allArgs, weak_self](const WebRtcInterface &exchanger) mutable {
-                                                 auto strong_self =  weak_self.lock();
-                                                 if (!strong_self) {
-                                                 return;
-                                                 }
+        [allArgs, weak_self](const WebRtcInterface &exchanger) mutable {
+            auto strong_self =  weak_self.lock();
+            if (!strong_self) {
+                return;
+            }
 
-                                                 return strong_self->processOffer(allArgs, const_cast<WebRtcInterface&>(exchanger));
-                                                 });
+            return strong_self->processOffer(allArgs, const_cast<WebRtcInterface&>(exchanger));
+        });
 
     return;
 };
@@ -437,12 +439,10 @@ void WebRtcSignalingPeer::handleCallAccept(SIGNALING_MSG_ARGS) {
     DebugL;
     ResponseTrigger trigger;
     if (!responseFilter(allArgs, trigger)) {
-        DebugL << "debug 12223";
         return;
     }
 
     CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, TYPE_KEY);
-    TraceL;
 
     auto room_id = allArgs[ROOM_ID_KEY];
     auto it = _tours.find(room_id);
@@ -465,12 +465,11 @@ void WebRtcSignalingPeer::handleCallRefuses(SIGNALING_MSG_ARGS) {
     DebugL;
     ResponseTrigger trigger;
     if (!responseFilter(allArgs, trigger)) {
-        DebugL << "debug 12223";
         return;
     }
 
     CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, TYPE_KEY);
-    TraceL;
+    DebugL;
 
     auto room_id = allArgs[ROOM_ID_KEY];
     auto it = _tours.find(room_id);
@@ -486,6 +485,7 @@ void WebRtcSignalingPeer::handleCallRefuses(SIGNALING_MSG_ARGS) {
     }
 
     _tours.erase(room_id);
+    InfoL;
     trigger(SockException(Err_other, StrPrinter << "call refuses by server, reason: " << allArgs[REASON_KEY]), "");
     return;
 }
@@ -493,7 +493,6 @@ void WebRtcSignalingPeer::handleCallRefuses(SIGNALING_MSG_ARGS) {
 void WebRtcSignalingPeer::handleCandidateIndication(SIGNALING_MSG_ARGS) {
     DebugL;
     CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, ICE_KEY, UFRAG_KEY, PWD_KEY);
-    DebugL;
 
     std::string identifier;
     //作为被叫
@@ -521,7 +520,7 @@ void WebRtcSignalingPeer::handleCandidateIndication(SIGNALING_MSG_ARGS) {
         }
     }
 
-    DebugL << "debug, recv: " << allArgs[ICE_KEY];
+    DebugL << "recv candidate: " << allArgs[ICE_KEY];
 
     if (identifier.empty()) {
         WarnL << "target room_id: " << allArgs[ROOM_ID_KEY] << " not match our room_id: " << getRoomId()

@@ -70,35 +70,30 @@ protected:
     virtual void startConnect();
     virtual void onResult(const toolkit::SockException &ex);
     virtual void onNegotiateFinish();
-
     virtual float getTimeOutSec();
 
-private:
-
     void doNegotiate();
-
     void doNegotiateWebsocket();
     void doNegotiateWhepOrWhip();
     void checkIn();
-    void checkOut();
     void doBye();
     void doByeWhepOrWhip();
-    void doByeWebsocket();
+    void checkOut();
+
     void gatheringCandidates(IceServerInfo::Ptr ice_server);
     void connectivityChecks();
     void candidate(const std::string& candidate, const std::string& ufrag, const std::string pwd);
 
 protected:
-    WebRTCUrl _url;
     toolkit::EventPoller::Ptr _poller;
 
     //for _negotiate_sdp
+    WebRTCUrl _url;
     HttpRequester::Ptr _negotiate = nullptr;
+    WebRtcSignalingPeer::Ptr _peer = nullptr;
     WebRtcTransport::Ptr _transport = nullptr;
     bool _is_negotiate_finished = false;
 
-    //for candidate
-    WebRtcSignalingPeer::Ptr _peer = nullptr;
 private:
     std::map<std::string /*candidate key*/, SocketHelper::Ptr> _socket_map;
 };

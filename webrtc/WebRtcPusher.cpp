@@ -23,15 +23,15 @@ WebRtcPusher::Ptr WebRtcPusher::create(const EventPoller::Ptr &poller,
                                        const ProtocolOption &option,
                                        WebRtcTransport::Role role, 
                                        WebRtcTransport::SignalingProtocols signaling_protocols) {
-    WebRtcPusher::Ptr ret(new WebRtcPusher(poller, src, ownership, info, option), [](WebRtcPusher *ptr) {
+    WebRtcPusher::Ptr pusher(new WebRtcPusher(poller, src, ownership, info, option), [](WebRtcPusher *ptr) {
         ptr->onDestory();
         delete ptr;
     });
 
-    ret->setRole(role);
-    ret->setSignalingProtocols(signaling_protocols);
-    ret->onCreate();
-    return ret;
+    pusher->setRole(role);
+    pusher->setSignalingProtocols(signaling_protocols);
+    pusher->onCreate();
+    return pusher;
 }
 
 WebRtcPusher::WebRtcPusher(const EventPoller::Ptr &poller,

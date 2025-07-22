@@ -43,6 +43,8 @@ void WebRtcProxyPlayer::play(const string &strUrl) {
 }
 
 void WebRtcProxyPlayer::teardown() {
+    DebugL;
+    doBye();
 }
 
 void WebRtcProxyPlayer::pause(bool bPause) {
@@ -95,7 +97,8 @@ void WebRtcProxyPlayerImp::startConnect() {
     MediaInfo info(_url._full_url);
     ProtocolOption option;
     std::weak_ptr<WebRtcProxyPlayerImp> weak_self = std::static_pointer_cast<WebRtcProxyPlayerImp>(shared_from_this());
-    _transport = WebRtcPusher::create(getPoller(), nullptr, nullptr, info, option, WebRtcTransport::Role::CLIENT, _url._signaling_protocols);
+    _transport = WebRtcPusher::create(getPoller(), nullptr, nullptr, info, option, 
+                                      WebRtcTransport::Role::CLIENT, _url._signaling_protocols);
     _transport->setOnShutdown([weak_self](const SockException &ex) {
         auto strong_self = weak_self.lock();
         if (!strong_self) {
@@ -117,10 +120,7 @@ void WebRtcProxyPlayerImp::onResult(const SockException &ex) {
 
 void WebRtcProxyPlayerImp::onPlayResult(const toolkit::SockException &ex) {
     DebugL;
-    // if (ex) {
     Super::onPlayResult(ex);
-    // }
-    //success result only occur when addTrackCompleted
     return;
 }
 

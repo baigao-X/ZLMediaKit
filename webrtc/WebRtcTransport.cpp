@@ -217,13 +217,16 @@ void WebRtcTransport::onCreate() {
     _dtls_transport = std::make_shared<RTC::DtlsTransport>(_poller, this);
     IceAgent::Role role = IceAgent::Role::Controlling;
     IceAgent::Implementation implementation = IceAgent::Implementation::Full;
+
     if (_role == Role::PEER) {
         role = IceAgent::Role::Controlled;
         if (_signaling_protocols == SignalingProtocols::WHEP_WHIP) {
             implementation = IceAgent::Implementation::Lite;
         }
     }
-    _ice_agent = std::make_shared<RTC::IceAgent>(this, implementation, role, _identifier, makeRandStr(24), getPoller());
+
+    _ice_agent = std::make_shared<RTC::IceAgent>(this, implementation, role, _identifier, 
+                                                 makeRandStr(24), getPoller());
 }
 
 void WebRtcTransport::onDestory() {
