@@ -186,7 +186,6 @@ static uint32_t calIceCandidatePriority(CandidateInfo::AddressType type, uint32_
 
 static SdpAttrCandidate::Ptr
 makeIceCandidate(std::string ip, uint16_t port, uint32_t priority = 100, const std::string& proto = "udp", const std::string& type = "host") {
-    TODO:
     auto candidate = std::make_shared<SdpAttrCandidate>();
     candidate->foundation = proto + "candidate";
     // rtp端口  [AUTO-TRANSLATED:b0addb27]

@@ -87,8 +87,8 @@ void WebRtcSignalingSession::onRecv(const Buffer::Ptr &buffer) {
 
 void WebRtcSignalingSession::onError(const SockException &err) {
     WarnL << "room_id: " << _room_id;
+    notifyByeIndication();
     s_rooms.erase(_room_id);
-    //除非对端显式的发送了注销执行,否则因为网络异常导致的会话中断，不中断正在拉流或推流的中webrtc会话,仅作移除
     return;
 }
 
