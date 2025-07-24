@@ -1039,7 +1039,9 @@ public:
     }
 
     Buffer::Ptr createRtcpRR(RtcpHeader *sr, uint32_t ssrc) {
-        _rtcp_context.onRtcp(sr);
+        if (sr) {
+            _rtcp_context.onRtcp(sr);
+        }
         return _rtcp_context.createRtcpRR(ssrc, getSSRC());
     }
 
@@ -1127,6 +1129,8 @@ void WebRtcTransportImp::onRtcp(const char *buf, size_t len) {
                     rtp_chn->setNtpStamp(sr->rtpts, sr->getNtpUnixStampMS());
                     auto rr = rtp_chn->createRtcpRR(sr, track->answer_ssrc_rtp);
                     sendRtcpPacket(rr->data(), rr->size(), true);
+                    
+                    _rtcp_rr_send_ticker.resetTime();
                 }
             } else {
                 WarnL << "未识别的sr rtcp包:" << rtcp->dumpString();
@@ -1145,6 +1149,8 @@ void WebRtcTransportImp::onRtcp(const char *buf, size_t len) {
                     track->rtcp_context_send->onRtcp(rtcp);
                     auto sr = track->rtcp_context_send->createRtcpSR(track->answer_ssrc_rtp);
                     sendRtcpPacket(sr->data(), sr->size(), true);
+                    
+                    _rtcp_sr_send_ticker.resetTime();
                 } else {
                     WarnL << "未识别的rr rtcp包:" << rtcp->dumpString();
                 }
@@ -1254,6 +1260,24 @@ void WebRtcTransportImp::onRtp(const char *buf, size_t len, uint64_t stamp_ms) {
         WarnL << "unknown rtp pt:" << (int)rtp->pt;
         return;
     }
+
+    if (_rtcp_rr_send_ticker.elapsedTime() > 5000) {
+        _rtcp_rr_send_ticker.resetTime();
+        
+        auto ssrc = ntohl(rtp->ssrc);
+        auto track_it = _ssrc_to_track.find(ssrc);
+        if (track_it != _ssrc_to_track.end()) {
+            auto &track = track_it->second;
+            auto rtp_chn = track->getRtpChannel(ssrc);
+            if (rtp_chn) {
+                auto rr = rtp_chn->createRtcpRR(nullptr, track->answer_ssrc_rtp);
+                if (rr && rr->size() > 0) {
+                    sendRtcpPacket(rr->data(), rr->size(), true);
+                }
+            }
+        }
+    }
+
     it->second->inputRtp(buf, len, stamp_ms, rtp);
 }
 
@@ -1392,6 +1416,16 @@ void WebRtcTransportImp::onSendRtp(const RtpPacket::Ptr &rtp, bool flush, bool r
     pair<bool /*rtx*/, MediaTrack *> ctx { rtx, track.get() };
     sendRtpPacket(rtp->data() + RtpPacket::kRtpTcpHeaderSize, rtp->size() - RtpPacket::kRtpTcpHeaderSize, flush, &ctx);
     _bytes_usage += rtp->size() - RtpPacket::kRtpTcpHeaderSize;
+
+    if (_rtcp_sr_send_ticker.elapsedTime() > 5000) {
+        _rtcp_sr_send_ticker.resetTime();
+        if (track->rtcp_context_send) {
+            auto sr = track->rtcp_context_send->createRtcpSR(track->answer_ssrc_rtp);
+            if (sr && sr->size() > 0) {
+                sendRtcpPacket(sr->data(), sr->size(), true);
+            }
+        }
+    }
 }
 
 void WebRtcTransportImp::onBeforeEncryptRtp(const char *buf, int &len, void *ctx) {
