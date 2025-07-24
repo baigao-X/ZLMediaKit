@@ -443,7 +443,7 @@ void WebRtcSignalingSession::sendRegisterAccept(Json::Value& body, const std::st
 }
 
 void WebRtcSignalingSession::sendAcceptResponse(Json::Value &body, const std::string& transaction_id) {
-    DebugL;
+    TraceL;
     body[CLASS_KEY] = CLASS_VALUE_ACCEPT;
     return sendResponse(body, transaction_id);
 }

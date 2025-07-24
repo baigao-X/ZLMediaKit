@@ -32,7 +32,7 @@ IceSession::Ptr queryIceTransport(uint8_t *data, size_t size, const EventPoller:
 ////////////  IceSession //////////////////////////
 ///
 IceSession::IceSession(const Socket::Ptr &sock) : Session(sock) {
-    DebugL;
+    TraceL;
 
     GET_CONFIG(string, iceUfrag, Rtc::kIceUfrag);
     GET_CONFIG(string, icePwd, Rtc::kIcePwd);
@@ -45,14 +45,14 @@ EventPoller::Ptr IceSession::queryPoller(const Buffer::Ptr &buffer) {
 }
 
 void IceSession::onRecv(const Buffer::Ptr &buffer) {
-    DebugL;
+    TraceL;
     auto pair = std::make_shared<IceTransport::Pair>(shared_from_this());
     _ice_transport->processSocketData((const uint8_t *)buffer->data(), buffer->size(), pair);
     return;
 }
 
 void IceSession::onError(const SockException &err) {
-    DebugL;
+    InfoL;
     return;
 }
 

@@ -214,8 +214,7 @@ void WebRtcSignalingPeer::onShutdown(const SockException &ex) {
 };
 
 void WebRtcSignalingPeer::onRecv(const Buffer::Ptr &buffer) {
-    DebugL;
-    InfoL << "recv msg:\r\n" << buffer->data();
+    TraceL << "recv msg:\r\n" << buffer->data();
 
     Json::Value args;
     Json::Reader reader;

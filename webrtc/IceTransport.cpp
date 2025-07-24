@@ -98,10 +98,8 @@ void IceServerInfo::parse(const std::string &url_in) {
 
 IceTransport::IceTransport(Listener* listener, const std::string& ufrag, const std::string& password, const EventPoller::Ptr &poller)
 : _poller(poller), _listener(listener), _ufrag(ufrag), _password(password) {
-    DebugL;
-
+    TraceL;
     _identifier = makeRandStr(32);
-
     _request_handlers.emplace(std::make_pair(StunPacket::Class::REQUEST, StunPacket::Method::BINDING), 
                               std::bind(&IceTransport::handleBindingRequest, this, placeholders::_1, placeholders::_2));
 }
@@ -181,7 +179,7 @@ void IceTransport::processStunPacket(const StunPacket::Ptr packet, Pair::Ptr pai
 }
 
 StunPacket::Authentication IceTransport::checkRequestAuthentication(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    TraceL;
 
     if (packet->getClass() == RTC::StunPacket::Class::INDICATION) {
         return  RTC::StunPacket::Authentication::OK;
@@ -217,7 +215,7 @@ StunPacket::Authentication IceTransport::checkResponseAuthentication(const StunP
 }
 
 void IceTransport::processResponse(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL;
 
     auto it = _response_handlers.find(packet->getTransactionId().data());
     if (it == _response_handlers.end()) {
@@ -280,7 +278,7 @@ bool IceTransport::processChannelData(const uint8_t* data, size_t len, Pair::Ptr
 }
 
 void IceTransport::processUnauthorizedResponse(const StunPacket::Ptr response, StunPacket::Ptr request, Pair::Ptr pair, MsgHandler handler) {
-    DebugL;
+    // TraceL;
     auto attr_nonce = dynamic_pointer_cast<StunAttrNonce>(response->getAttribute(StunAttribute::Type::NONCE));
     auto attr_realm = dynamic_pointer_cast<StunAttrRealm>(response->getAttribute(StunAttribute::Type::REALM));
     if (!attr_nonce || !attr_realm) {
@@ -296,7 +294,7 @@ void IceTransport::processUnauthorizedResponse(const StunPacket::Ptr response, S
 }
 
 void IceTransport::processRequest(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL;
     if (RTC::StunPacket::Authentication::OK != checkRequestAuthentication(packet, pair)) {
         WarnL << " checkRequestAuthentication fail, Method: " << packet->getMethodStr() << ", Class: " << packet->getClassStr();
         return;
@@ -312,7 +310,7 @@ void IceTransport::processRequest(const StunPacket::Ptr packet, Pair::Ptr pair) 
 }
 
 void IceTransport::handleBindingRequest(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL;
 
     auto response = packet->createSuccessResponse();
     response->setUfrag(_ufrag);
@@ -334,7 +332,8 @@ void IceTransport::handleBindingRequest(const StunPacket::Ptr packet, Pair::Ptr 
 }
 
 void IceTransport::sendChannelData(uint16_t channel_number, const Buffer::Ptr& buffer, Pair::Ptr pair) {
-    DebugL;
+    // TraceL;
+ 
     // ChannelData不是STUN消息，需要单独实现
     // ChannelData格式：2字节Channel Number + 2字节数据长度 + 数据内容
 
@@ -367,7 +366,7 @@ void IceTransport::sendChannelData(uint16_t channel_number, const Buffer::Ptr& b
 
 
 void IceTransport::sendUnauthorizedResponse(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL;
 
     auto response = packet->createErrorResponse(StunAttrErrorCode::Code::Unauthorized);
     sendPacket(response, pair);
@@ -375,22 +374,22 @@ void IceTransport::sendUnauthorizedResponse(const StunPacket::Ptr packet, Pair::
 }
 
 void IceTransport::sendErrorResponse(const StunPacket::Ptr packet, Pair::Ptr pair, StunAttrErrorCode::Code errorCode) {
-    DebugL;
+    // TraceL;
     auto response = packet->createErrorResponse(errorCode);
     sendPacket(response, pair);
 }
 
 void IceTransport::sendRequest(const StunPacket::Ptr packet, Pair::Ptr pair, MsgHandler handler) {
-    DebugL;
+    // TraceL;
     _response_handlers.emplace(packet->getTransactionId().data(), std::make_pair(packet, handler));
     sendPacket(packet, pair);
     return;
 }
 
 void IceTransport::sendPacket(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL << "send packet calss: " << packet->getClassStr() << ", method: " << packet->getMethodStr()
-        << ", transaction_id: " << hexdump(packet->getTransactionId().data(), packet->getTransactionId().size())
-        << ", " << pair->get_local_ip() <<":" << pair->get_local_port() << " -> " << pair->get_peer_ip() << ":" << pair->get_peer_port();
+    // TraceL << "send packet calss: " << packet->getClassStr() << ", method: " << packet->getMethodStr()
+    //     << ", transaction_id: " << hexdump(packet->getTransactionId().data(), packet->getTransactionId().size())
+    //     << ", " << pair->get_local_ip() <<":" << pair->get_local_port() << " -> " << pair->get_peer_ip() << ":" << pair->get_peer_port();
 
     packet->serialize();
     toolkit::Buffer::Ptr buffer = std::static_pointer_cast<toolkit::Buffer>(packet);
@@ -675,7 +674,7 @@ bool IceServer::processSocketData(const uint8_t* data, size_t len, Pair::Ptr pai
 }
 
 void IceServer::processRealyPacket(const Buffer::Ptr &buffer, Pair::Ptr pair) {
-    DebugL << pair->get_local_ip() <<":" << pair->get_local_port() << " <- " << pair->get_peer_ip() << ":" << pair->get_peer_port();
+    // TraceL << pair->get_local_ip() <<":" << pair->get_local_port() << " <- " << pair->get_peer_ip() << ":" << pair->get_peer_port();
 
     sockaddr_storage peer_addr;
     pair->get_peer_addr(peer_addr);
@@ -695,7 +694,7 @@ void IceServer::processRealyPacket(const Buffer::Ptr &buffer, Pair::Ptr pair) {
 }
 
 void IceServer::handleAllocateRequest(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL;
     auto response = packet->createSuccessResponse();
     response->setUfrag(_ufrag);
     response->setPassword(_password);
@@ -723,11 +722,11 @@ void IceServer::handleAllocateRequest(const StunPacket::Ptr packet, Pair::Ptr pa
 }
 
 void IceServer::handleRefreshRequest(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL
 }
 
 void IceServer::handleCreatePermissionRequest(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL
 
     // 检查XOR-PEER-ADDRESS属性是否存在
     auto peer_addr = static_pointer_cast<StunAttrXorPeerAddress>(packet->getAttribute(StunAttribute::Type::XOR_PEER_ADDRESS));
@@ -746,7 +745,7 @@ void IceServer::handleCreatePermissionRequest(const StunPacket::Ptr packet, Pair
 }
 
 void IceServer::handleChannelbindRequest(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL
 
     // 检查必要的属性
     auto channel_number = static_pointer_cast<StunAttrChannelNumber>(packet->getAttribute(StunAttribute::Type::CHANNEL_NUMBER));
@@ -783,7 +782,7 @@ void IceServer::handleChannelbindRequest(const StunPacket::Ptr packet, Pair::Ptr
 }
 
 void IceServer::handleSendIndication(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL
 
     // 检查必要的属性
     auto peer_addr = static_pointer_cast<StunAttrXorPeerAddress>(packet->getAttribute(StunAttribute::Type::XOR_PEER_ADDRESS));
@@ -808,7 +807,7 @@ void IceServer::handleSendIndication(const StunPacket::Ptr packet, Pair::Ptr pai
 }
 
 void IceServer::handleChannelData(uint16_t channel_number, const char* data, size_t len, Pair::Ptr pair) {
-    DebugL << "Received ChannelData message, channel number: " << channel_number;
+    // TraceL << "Received ChannelData message, channel number: " << channel_number;
 
     // 查找该通道号对应的目标地址
     auto it = _channel_bindings.find(channel_number);
@@ -829,7 +828,7 @@ void IceServer::handleChannelData(uint16_t channel_number, const char* data, siz
 }
 
 void IceServer::sendUnauthorizedResponse(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL
 
     if (packet->getMethod() == StunPacket::Method::ALLOCATE) {
         auto response = packet->createErrorResponse(StunAttrErrorCode::Code::Unauthorized);
@@ -850,7 +849,7 @@ void IceServer::sendUnauthorizedResponse(const StunPacket::Ptr packet, Pair::Ptr
 }
 
 StunPacket::Authentication IceServer::checkRequestAuthentication(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL
 
     //ICE SERVER 不对BINDGING请求校验
     if (packet->getMethod() == RTC::StunPacket::Method::BINDING) {
@@ -861,7 +860,7 @@ StunPacket::Authentication IceServer::checkRequestAuthentication(const StunPacke
 }
 
 void IceServer::sendDataIndication(const sockaddr_storage& peer_addr, const Buffer::Ptr& buffer, Pair::Ptr pair) {
-    DebugL;
+    // TraceL
 
     auto packet = std::make_shared<DataIndicationPacket>();
 
@@ -877,14 +876,14 @@ void IceServer::sendDataIndication(const sockaddr_storage& peer_addr, const Buff
 
     sendPacket(packet, pair);
 
-    DebugL << "Forward UDP data as DataIndication," 
-        << "from: " << pair->get_local_ip() << ":" << pair->get_local_port()
-        << " to: " << pair->get_peer_ip() << ":" << pair->get_peer_port() << ", size: " << buffer->size();
+    // TraceL << "Forward UDP data as DataIndication," 
+    //     << "from: " << pair->get_local_ip() << ":" << pair->get_local_port()
+    //     << " to: " << pair->get_peer_ip() << ":" << pair->get_peer_port() << ", size: " << buffer->size();
     return;
 }
 
 SocketHelper::Ptr IceServer::allocateRealyed(Pair::Ptr pair) {
-    DebugL;
+    // DebugL;
 
     //only support udp
     auto port = PortManager<0>::Instance().getSinglePort();
@@ -919,7 +918,7 @@ SocketHelper::Ptr IceServer::allocateRealyed(Pair::Ptr pair) {
 }
 
 void IceServer::relayForwordingData(const toolkit::Buffer::Ptr& buffer, struct sockaddr_storage peer_addr) {
-    DebugL;
+    TraceL;
     getPoller()->async([=]() {
         auto it = _realyed_pairs.find(peer_addr);
         if (it == _realyed_pairs.end()) {
@@ -956,16 +955,16 @@ void IceServer::relayForwordingData(const toolkit::Buffer::Ptr& buffer, struct s
 
         sendSocketData(buffer, it->second.second);
 
-        DebugL << "Forwarded ChannelData to peer: " 
-            << SockUtil::inet_ntoa((struct sockaddr *)&peer_addr) 
-            << ":" << SockUtil::inet_port((struct sockaddr *)&peer_addr);
+        // TraceL << "Forwarded ChannelData to peer: " 
+        //     << SockUtil::inet_ntoa((struct sockaddr *)&peer_addr) 
+        //     << ":" << SockUtil::inet_port((struct sockaddr *)&peer_addr);
 
     });
     return;
 }
 
 void IceServer::relayBackingData(const toolkit::Buffer::Ptr& buffer, Pair::Ptr pair, struct sockaddr_storage peer_addr) {
-    DebugL;
+    // TraceL;
 
     sockaddr_storage addr;
     pair->get_peer_addr(addr);
@@ -983,9 +982,9 @@ void IceServer::relayBackingData(const toolkit::Buffer::Ptr& buffer, Pair::Ptr p
 
     sendSocketData(buffer, forward_pair);
 
-    DebugL << "relay backing" 
-        << " from: " << forward_pair->get_local_ip() << ":" << forward_pair->get_local_port()
-        << " to peer: " << forward_pair->get_peer_ip() << ":" << forward_pair->get_peer_port();
+    // DebugL << "relay backing" 
+    //     << " from: " << forward_pair->get_local_ip() << ":" << forward_pair->get_local_port()
+    //     << " to peer: " << forward_pair->get_peer_ip() << ":" << forward_pair->get_peer_port();
     return;
 }
 
@@ -1034,7 +1033,7 @@ IceAgent::IceAgent(Listener* listener, Implementation implementation, Role role,
 }
 
 void IceAgent::gatheringCandidates(IceServerInfo::Ptr ice_server) {
-    DebugL;
+    // TraceL;
     _ice_server = ice_server;
 
     auto interfaces = SockUtil::getInterfaceList();
@@ -1066,13 +1065,13 @@ void IceAgent::gatheringCandidates(IceServerInfo::Ptr ice_server) {
 }
 
 void IceAgent::connectivityChecks(CandidateInfo candidate) {
-    DebugL;
+    // TraceL;
 
     setState(IceAgent::State::Running);
     auto ret = _remote_candidates.emplace(candidate);
     if (ret.second) {
         for (auto socket: _sockets) {
-            InfoL << "cnadidate pair: local ip:" << socket->get_local_ip() << ", local port: " << socket->get_local_port() << ", peer host: " << candidate._addr._host << ", peer port: " << candidate._addr._port << "type: " << candidate.getAddressTypeStr();
+            InfoL << "connectivity check cnadidate pair: local ip:" << socket->get_local_ip() << ", local port: " << socket->get_local_port() << ", peer host: " << candidate._addr._host << ", peer port: " << candidate._addr._port << "type: " << candidate.getAddressTypeStr();
             auto pair = std::make_shared<Pair>(socket, candidate._addr._host, candidate._addr._port);
             auto candidate_pair = std::make_pair(pair, candidate);
             _checklist.push_back(std::make_pair(candidate_pair, CandidateInfo::State::InProgress));
@@ -1088,7 +1087,7 @@ void IceAgent::connectivityChecks(CandidateInfo candidate) {
 }
 
 void IceAgent::localRealyedConnectivityChecks(CandidateInfo candidate) {
-    DebugL;
+    // TraceL;
 
     for (auto socket: _sockets) {
         auto local_realy_pair = std::make_shared<Pair>(socket, _ice_server->_addr._host, _ice_server->_addr._port);
@@ -1106,13 +1105,13 @@ void IceAgent::localRealyedConnectivityChecks(CandidateInfo candidate) {
 }
 
 void IceAgent::nominated(Pair::Ptr pair, CandidateTuple candidate) {
-    InfoL;
+    // TraceL;
     auto handler = std::bind(&IceAgent::handleNominatedResponse, this, placeholders::_1, placeholders::_2, candidate);
     sendBindRequest(pair, candidate, true, handler);
 }
 
 void IceAgent::sendSendIndication(const sockaddr_storage& peer_addr, toolkit::Buffer::Ptr buffer, Pair::Ptr pair) {
-    DebugL;
+    // TraceL;
     auto packet = std::make_shared<SendIndicationPacket>();
 
     auto attr_peer_address = std::make_shared<StunAttrXorPeerAddress>(packet->getTransactionId());
@@ -1131,7 +1130,7 @@ void IceAgent::sendSendIndication(const sockaddr_storage& peer_addr, toolkit::Bu
 
 
 void IceAgent::gatheringCandidates(Pair::Ptr pair, IceServerInfo::Ptr ice_server) {
-    DebugL;
+    // TraceL;
     auto handle = std::bind(&IceAgent::handleGatheringCandidatesResponse, this, placeholders::_1, placeholders::_2);
     if (ice_server->_schema == IceServerInfo::SchemaType::TURN) {
         sendAllocateRequest(pair);
@@ -1142,7 +1141,7 @@ void IceAgent::gatheringCandidates(Pair::Ptr pair, IceServerInfo::Ptr ice_server
 }
 
 void IceAgent::connectivityChecks(Pair::Ptr pair, CandidateTuple candidate) {
-    DebugL;
+    // TraceL;
     auto handler = std::bind(&IceAgent::handleConnectivityChecksResponse, this, placeholders::_1, placeholders::_2, candidate);
     sendBindRequest(pair, candidate, false, handler);
     return;
@@ -1154,7 +1153,7 @@ void IceAgent::tryTriggerredChecks(Pair::Ptr pair) {
 }
 
 void IceAgent::sendBindRequest(Pair::Ptr pair, MsgHandler handler) {
-    DebugL;
+    // TraceL;
     auto packet = std::make_shared<BindingPacket>();
     packet->setUfrag(_ufrag);
     packet->setPassword(_password);
@@ -1168,8 +1167,7 @@ void IceAgent::sendBindRequest(Pair::Ptr pair, MsgHandler handler) {
 }
 
 void IceAgent::sendBindRequest(Pair::Ptr pair, CandidateTuple candidate, bool use_candidate, MsgHandler handler) {
-    DebugL;
-
+    // TraceL;
     auto packet = std::make_shared<BindingPacket>();
     packet->setUfrag(_ufrag);
     packet->setPassword(_password);
@@ -1206,7 +1204,7 @@ void IceAgent::sendBindRequest(Pair::Ptr pair, CandidateTuple candidate, bool us
 }
 
 void IceAgent::sendAllocateRequest(Pair::Ptr pair) {
-    DebugL;
+    // TraceL;
     auto packet = std::make_shared<AllocatePacket>();
     packet->setNeedMessageIntegrity(false);
     packet->setUfrag(_ufrag);
@@ -1223,7 +1221,7 @@ void IceAgent::sendAllocateRequest(Pair::Ptr pair) {
 }
 
 void IceAgent::sendCreatePermissionRequest(Pair::Ptr pair, const sockaddr_storage& peer_addr) {
-    DebugL;
+    // TraceL;
 
     addPermission(peer_addr);
 
@@ -1246,7 +1244,7 @@ void IceAgent::sendCreatePermissionRequest(Pair::Ptr pair, const sockaddr_storag
 }
 
 void IceAgent::sendChannelBindRequest(Pair::Ptr pair, uint16_t channel_number, const sockaddr_storage& peer_addr) {
-    DebugL;
+    // TraceL;
     auto packet = std::make_shared<ChannelBindPacket>();
     packet->setUfrag(_ufrag);
     packet->setPassword(_password);
@@ -1271,16 +1269,14 @@ void IceAgent::sendChannelBindRequest(Pair::Ptr pair, uint16_t channel_number, c
 }
 
 void IceAgent::processRequest(const StunPacket::Ptr packet, Pair::Ptr pair) {
-
     static toolkit::onceToken token([this]() {
         _request_handlers.emplace(std::make_pair(StunPacket::Class::INDICATION, StunPacket::Method::DATA), std::bind(&IceAgent::handleDataIndication, this, placeholders::_1, placeholders::_2));
     });
-
     return IceTransport::processRequest(packet, pair);
 }
 
 void IceAgent::handleBindingRequest(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL;
     auto controlling = static_pointer_cast<StunAttrIceControlling>(packet->getAttribute(StunAttribute::Type::ICE_CONTROLLING));
     auto controlled = static_pointer_cast<StunAttrIceControlled>(packet->getAttribute(StunAttribute::Type::ICE_CONTROLLED));
     auto priority = static_pointer_cast<StunAttrPriority>(packet->getAttribute(StunAttribute::Type::PRIORITY));
@@ -1344,7 +1340,7 @@ void IceAgent::handleBindingRequest(const StunPacket::Ptr packet, Pair::Ptr pair
 }
 
 void IceAgent::handleGatheringCandidatesResponse(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL; 
 
     if (RTC::StunPacket::Class::SUCCESS_RESPONSE != packet->getClass()) {
         WarnL << "fail, get response class: " << packet->getClassStr();
@@ -1370,7 +1366,7 @@ void IceAgent::handleGatheringCandidatesResponse(const StunPacket::Ptr packet, P
 }
 
 void IceAgent::handleConnectivityChecksResponse(const StunPacket::Ptr packet, Pair::Ptr pair, CandidateTuple candidate) {
-    DebugL;
+    // TraceL; 
 
     if (RTC::StunPacket::Class::SUCCESS_RESPONSE != packet->getClass()) {
         WarnL << "fail, get response class: " << packet->getClassStr();
@@ -1418,14 +1414,13 @@ void IceAgent::handleConnectivityChecksResponse(const StunPacket::Ptr packet, Pa
     preflx_candidate._pwd = getPassword();
     onGatheringCandidate(pair, preflx_candidate);
 
-    InfoL << "get prflx: " <<srflx->getAddrString() << ":" << srflx->getPort();
-
+    DebugL << "get prflx: " <<srflx->getAddrString() << ":" << srflx->getPort();
     onConnected(pair);
     return;
 }
 
 void IceAgent::handleNominatedResponse(const StunPacket::Ptr packet, Pair::Ptr pair, CandidateTuple candidate) {
-    DebugL;
+    // TraceL; 
 
     if (RTC::StunPacket::Class::SUCCESS_RESPONSE != packet->getClass()) {
         WarnL << "fail, get response class: " << packet->getClassStr();
@@ -1468,7 +1463,7 @@ void IceAgent::handleNominatedResponse(const StunPacket::Ptr packet, Pair::Ptr p
 }
 
 void IceAgent::handleAllocateResponse(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL; 
 
     if (RTC::StunPacket::Class::SUCCESS_RESPONSE != packet->getClass()) {
         WarnL << "fail, get response class: " << packet->getClassStr() << "method: " << packet->getMethodStr() 
@@ -1511,14 +1506,15 @@ void IceAgent::handleAllocateResponse(const StunPacket::Ptr packet, Pair::Ptr pa
 }
 
 void IceAgent::handleCreatePermissionResponse(const StunPacket::Ptr packet, Pair::Ptr pair, const sockaddr_storage peer_addr) {
-    DebugL;
+    // TraceL; 
 
     if (RTC::StunPacket::Class::SUCCESS_RESPONSE != packet->getClass()) {
         WarnL << "CreatePermission failed, response class: " << packet->getClassStr();
         return;
     }
 
-    DebugL << "CreatePermission successfully";
+    
+    // TraceL << "CreatePermission successfully";
 
     static uint16_t next_channel = 0x4000; // 有效范围是 0x4000-0x7FFF
     uint16_t channel_number = next_channel++;
@@ -1531,7 +1527,7 @@ void IceAgent::handleCreatePermissionResponse(const StunPacket::Ptr packet, Pair
 }
 
 void IceAgent::handleChannelBindResponse(const StunPacket::Ptr packet, Pair::Ptr pair, uint16_t channel_number, const sockaddr_storage peer_addr) {
-    DebugL;
+    // TraceL;
 
     if (RTC::StunPacket::Class::SUCCESS_RESPONSE != packet->getClass()) {
         WarnL << "ChannelBind failed, response class: " << packet->getClassStr();
@@ -1539,12 +1535,12 @@ void IceAgent::handleChannelBindResponse(const StunPacket::Ptr packet, Pair::Ptr
     }
 
     addChannelBind(channel_number, peer_addr);
-    DebugL << "ChannelBind successfully";
+    // DebugL << "ChannelBind successfully";
     return;
 }
 
 void IceAgent::handleDataIndication(const StunPacket::Ptr packet, Pair::Ptr pair) {
-    DebugL;
+    // TraceL;
 
     // 检查必要的属性
     auto peer_addr = static_pointer_cast<StunAttrXorPeerAddress>(packet->getAttribute(StunAttribute::Type::XOR_PEER_ADDRESS));
@@ -1583,7 +1579,7 @@ void IceAgent::handleDataIndication(const StunPacket::Ptr packet, Pair::Ptr pair
 }
 
 void IceAgent::handleChannelData(uint16_t channel_number, const char* data, size_t len, Pair::Ptr pair) {
-    DebugL << "Received ChannelData message, channel number: " << channel_number;
+    // TraceL << "Received ChannelData message, channel number: " << channel_number;
 
     // 查找该通道号对应的目标地址
     auto it = _channel_bindings.find(channel_number);
@@ -1628,29 +1624,30 @@ void IceAgent::onGatheringCandidate(Pair::Ptr pair, CandidateInfo candidate) {
 }
 
 void IceAgent::onConnected(IceTransport::Pair::Ptr pair) {
-    InfoL;
-
-    InfoL << "connected pair: " 
+    DebugL << "get connectivity check pair: " 
         << pair->get_local_ip() << ":" << pair->get_local_port()
-        << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port()
-        << " realyed addr: " << pair->get_realyed_ip() << ":" << pair->get_realyed_port();
+        << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port() 
+        << (!pair->get_realyed_ip().empty() ?  (" realyed addr: " + pair->get_realyed_ip() + ":" 
+        + to_string(pair->get_realyed_port())) : " ");
 
     if (getState() != State::Running) {
         InfoL << "ice state: "<< stateToString(getState()) << " is not running, skip";
         return;
     }
 
-    InfoL << "checklist size: " << _checklist.size();
+    TraceL << "checklist size: " << _checklist.size();
+    //判断ConnectivityCheck的pair是否在checklist中,存在的话加入到validlist
     for (auto &it : _checklist) {
         auto &candidate_pair = it.first;
         auto &pair_it = candidate_pair.first;
         auto &remote_candidate = candidate_pair.second;
         auto &state = it.second;
 
-        InfoL << "try pair: " << remote_candidate.getAddressTypeStr() << " candidate, " 
-            << pair_it->get_local_ip() << ":" << pair_it->get_local_port()
-            << " <-> " << pair_it->get_peer_ip() << ":" << pair_it->get_peer_port()
-            << " realyed addr: " << pair_it->get_realyed_ip() << ":" << pair_it->get_realyed_port();
+        TraceL << "check pair: " << remote_candidate.getAddressTypeStr() << " candidate, "
+              << pair_it->get_local_ip() << ":" << pair_it->get_local_port()
+              << " <-> " << pair_it->get_peer_ip() << ":" << pair_it->get_peer_port()
+              << (!pair_it->get_realyed_ip().empty() ? (" realyed addr: " + pair_it->get_realyed_ip() + ":" 
+              + to_string(pair_it->get_realyed_port())) : " ");
 
         //即使是新的Peer 反射地址,也已经添加到_checklist中了
         //所以肯定会在_checklist中找到匹配项
@@ -1660,10 +1657,11 @@ void IceAgent::onConnected(IceTransport::Pair::Ptr pair) {
 
         GET_CONFIG(bool, local_only_relayed, Rtc::kLocalOnlyRelayed);
         if (local_only_relayed && pair->_realyed_addr == nullptr) {
-            InfoL << "local only relayed, skip pair: " << remote_candidate.getAddressTypeStr() << " candidate, " 
+            DebugL << "local only relayed, skip pair: " << remote_candidate.getAddressTypeStr() << " candidate, " 
                 << pair->get_local_ip() << ":" << pair->get_local_port()
                 << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port()
-                << " realyed addr: " << pair->get_realyed_ip() << ":" << pair->get_realyed_port();
+                << (!pair->get_realyed_ip().empty() ?  (" realyed addr: " + pair->get_realyed_ip() + ":" 
+                + to_string(pair->get_realyed_port())) : " ");
             return;
         }
 
@@ -1674,20 +1672,21 @@ void IceAgent::onConnected(IceTransport::Pair::Ptr pair) {
         state = CandidateInfo::State::Succeeded;
 
         //如果开启只走转发路径,忽略除了REALY之外的candidate
-
         GET_CONFIG(bool, remote_only_relayed, Rtc::kRemoteOnlyRelayed);
         if (remote_only_relayed && CandidateInfo::AddressType::RELAY != remote_candidate._type) {
-            InfoL << "remote only relayed, skip pair type: " << remote_candidate.getAddressTypeStr() << " candidate, " 
+            DebugL << "remote only relayed, skip pair type: " << remote_candidate.getAddressTypeStr() << " candidate, " 
                 << pair->get_local_ip() << ":" << pair->get_local_port()
                 << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port()
-                << " realyed addr: " << pair->get_realyed_ip() << ":" << pair->get_realyed_port();
+                << (!pair->get_realyed_ip().empty() ?  (" realyed addr: " + pair->get_realyed_ip() + ":" 
+                + to_string(pair->get_realyed_port())) : " ");
             return;
         }
 
-        InfoL << "get type: " << remote_candidate.getAddressTypeStr() << " candidate " 
+        InfoL << "push type: " << remote_candidate.getAddressTypeStr() << " candidate to valid_list :" 
             << pair->get_local_ip() << ":" << pair->get_local_port()
             << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port()
-            << " realyed addr: " << pair->get_realyed_ip() << ":" << pair->get_realyed_port();
+            << (!pair->get_realyed_ip().empty() ?  (" realyed addr: " + pair->get_realyed_ip() + ":" 
+            + to_string(pair->get_realyed_port())) : " ");
 
         _valid_list.push_back(candidate_pair);
 
@@ -1705,14 +1704,16 @@ void IceAgent::onConnected(IceTransport::Pair::Ptr pair) {
 }
 
 void IceAgent::onCompleted(IceTransport::Pair::Ptr pair) {
-    InfoL;
+    // TraceL;
     bool found_in_valid_list = false;
+    CandidateInfo info;
     if (getImplementation() == Implementation::Full) {
         for (auto &candidate_pair : _valid_list) {
             auto &pair_it = candidate_pair.first;
             auto &remote_candidate = candidate_pair.second;
 
             if (Pair::is_same(pair_it.get(), pair.get())) {
+                info._type = candidate_pair.second._type;
                 found_in_valid_list = true;
                 break;
             }
@@ -1731,9 +1732,11 @@ void IceAgent::onCompleted(IceTransport::Pair::Ptr pair) {
 
     if (found_in_valid_list && getState() != IceAgent::State::Completed) {
         InfoL << "select pair: "
+            << "type: " << info.getAddressTypeStr() << " "
             << pair->get_local_ip() << ":" << pair->get_local_port()
             << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port()
-            << " (realyed: " << pair->get_realyed_ip() << ":" << pair->get_realyed_port() << ")";
+            << (!pair->get_realyed_ip().empty() ?  (" realyed addr: " + pair->get_realyed_ip() + ":" 
+            + to_string(pair->get_realyed_port())) : " ");
 
         setSelectedPair(pair);
         setState(IceAgent::State::Completed);
@@ -1745,7 +1748,6 @@ void IceAgent::onCompleted(IceTransport::Pair::Ptr pair) {
         _nominated_pair = nullptr;
     }
     return;
-
 }
 
 void IceAgent::refreshPermissions() {
@@ -1813,14 +1815,11 @@ void IceAgent::refreshChannelBindings() {
 
 void IceAgent::setSelectedPair(Pair::Ptr pair) {
     DebugL;
-
     if (_selected_pair && Pair::is_same(pair.get(), _selected_pair.get())){
         return;
     }
-
     _last_selected_pair = std::static_pointer_cast<Pair>(_selected_pair);
     _selected_pair = pair;
-
 }
 
 void IceAgent::sendSocketData(toolkit::Buffer::Ptr buf, Pair::Ptr pair, bool flush) {
@@ -1841,7 +1840,7 @@ void IceAgent::sendSocketData(toolkit::Buffer::Ptr buf, Pair::Ptr pair, bool flu
 }
 
 void IceAgent::sendRealyPacket(toolkit::Buffer::Ptr buffer, Pair::Ptr pair, bool flush) {
-    DebugL;
+    // TraceL;
     auto peer_addr = std::move(pair->_realyed_addr);
     pair->_realyed_addr = nullptr;
 

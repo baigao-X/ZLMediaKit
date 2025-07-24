@@ -301,7 +301,6 @@ void WebRtcTransport::connectivityChecks() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void WebRtcTransport::onIceTransportCompleted() {
-    DebugL;
     InfoL << getIdentifier();
 
     if (!_answer_sdp) {
