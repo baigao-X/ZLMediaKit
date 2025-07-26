@@ -147,7 +147,6 @@ void WebRtcSignalingPeer::checkOut(const std::string& peer_room_id) {
 
 
 void WebRtcSignalingPeer::candidate(const std::string& transport_identifier, const std::string& candidate, const std::string& ice_ufrag, const std::string& ice_pwd) {
-    DebugL;
     getPoller()->async([=] () {
         sendCandidateIndication(transport_identifier, candidate, ice_ufrag, ice_pwd);
     });
@@ -519,7 +518,7 @@ void WebRtcSignalingPeer::handleCandidateIndication(SIGNALING_MSG_ARGS) {
         }
     }
 
-    DebugL << "recv candidate: " << allArgs[ICE_KEY];
+    TraceL << "recv remote candidate: " << allArgs[ICE_KEY];
 
     if (identifier.empty()) {
         WarnL << "target room_id: " << allArgs[ROOM_ID_KEY] << " not match our room_id: " << getRoomId()

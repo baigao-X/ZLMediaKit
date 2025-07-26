@@ -1360,7 +1360,6 @@ void RtcMedia::checkValid() const {
         // When not simulcast, check if the RTP SSRC is specified
         CHECK(!rtp_rtx_ssrc.empty() || !send_rtp);
 
-        InfoL << "send_rtp:" << send_rtp;
         for (auto ssrc : rtp_rtx_ssrc) {
             InfoL << "ssrc:" << ssrc.cname << "," << ssrc.msid;
         }

@@ -339,7 +339,7 @@ void WebRtcTransport::onIceTransportDisconnected() {
 }
 
 void WebRtcTransport::onIceTransportGatheringCandidate(IceTransport::Pair::Ptr pair, CandidateInfo candidate) {
-    InfoL << getIdentifier() <<", get candidate: " << candidate._addr._host << ":" << candidate._addr._port;
+    InfoL << getIdentifier() << " get local candidate type "  << candidate.getAddressTypeStr() << " : " << candidate._addr._host << ":" << candidate._addr._port;
 
     if (_on_gathering_candidate) {
         auto type = mappingCandidateTypeEnum2Str(candidate._type);

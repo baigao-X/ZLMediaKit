@@ -1043,6 +1043,11 @@ void IceAgent::gatheringCandidates(IceServerInfo::Ptr ice_server) {
             continue;
         }
 
+        if (obj["name"]  != "ens33") {
+            DebugL << "skip interace: " << obj["name"];
+            continue;
+        }
+
         CandidateInfo candidate;
         candidate._type = CandidateInfo::AddressType::HOST;
         candidate._addr._host = obj["ip"];
@@ -1054,8 +1059,8 @@ void IceAgent::gatheringCandidates(IceServerInfo::Ptr ice_server) {
         candidate._addr._port = socket->get_local_port();
         candidate._base_addr._port = candidate._addr._port;
 
-        TraceL << "gatheringCandidates local ip:" << candidate._addr._host << ", local port:" << candidate._addr._port 
-            << ", server host: " << ice_server->_addr._host << ", server port: " << ice_server->_addr._port;
+        TraceL << "gathering local candidate " << candidate._addr._host << ":" << candidate._addr._port 
+            << " from stun server " << ice_server->_addr._host << ":" << ice_server->_addr._port;
 
         auto pair = std::make_shared<Pair>(socket);
         onGatheringCandidate(pair, candidate);
@@ -1071,7 +1076,7 @@ void IceAgent::connectivityChecks(CandidateInfo candidate) {
     auto ret = _remote_candidates.emplace(candidate);
     if (ret.second) {
         for (auto socket: _sockets) {
-            InfoL << "connectivity check cnadidate pair: local ip:" << socket->get_local_ip() << ", local port: " << socket->get_local_port() << ", peer host: " << candidate._addr._host << ", peer port: " << candidate._addr._port << "type: " << candidate.getAddressTypeStr();
+            InfoL << "connectivity check cnadidate pair, local: " << socket->get_local_ip() << ":" << socket->get_local_port() << " remote type: " << candidate.getAddressTypeStr() << " " << candidate._addr._host << ":" << candidate._addr._port;
             auto pair = std::make_shared<Pair>(socket, candidate._addr._host, candidate._addr._port);
             auto candidate_pair = std::make_pair(pair, candidate);
             _checklist.push_back(std::make_pair(candidate_pair, CandidateInfo::State::InProgress));
@@ -1414,7 +1419,7 @@ void IceAgent::handleConnectivityChecksResponse(const StunPacket::Ptr packet, Pa
     preflx_candidate._pwd = getPassword();
     onGatheringCandidate(pair, preflx_candidate);
 
-    DebugL << "get prflx: " <<srflx->getAddrString() << ":" << srflx->getPort();
+    DebugL << "get candidate type preflx: " << srflx->getAddrString() << ":" << srflx->getPort();
     onConnected(pair);
     return;
 }
@@ -1603,7 +1608,7 @@ void IceAgent::handleChannelData(uint16_t channel_number, const char* data, size
 
 
 void IceAgent::onGatheringCandidate(Pair::Ptr pair, CandidateInfo candidate) {
-    InfoL << " get candidate: " << candidate._addr._host << ":" << candidate._addr._port << ", type: " << candidate.getAddressTypeStr();
+    InfoL << " get local candidate type "  << candidate.getAddressTypeStr() << " : " << candidate._addr._host << ":" << candidate._addr._port;
 
     auto ret = _local_candidates.emplace(candidate);
     if (!ret.second) {
