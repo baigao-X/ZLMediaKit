@@ -169,21 +169,6 @@ static CandidateInfo::AddressType mappingCandidateTypeStr2Enum(const std::string
     }
 }
 
-static uint32_t calIceCandidatePriority(CandidateInfo::AddressType type, uint32_t component_id) {
-    uint32_t type_preference = 100;
-
-    switch (type) {
-        case CandidateInfo::AddressType::HOST: type_preference = 126;  break;
-        case CandidateInfo::AddressType::SRFLX: type_preference = 100; break;
-        case CandidateInfo::AddressType::PRFLX: type_preference = 100; break;
-        case CandidateInfo::AddressType::RELAY: type_preference = 0; break;
-        default: throw std::invalid_argument(StrPrinter << "not support type :" << (uint32_t)type);
-    }
-
-    uint32_t local_preference = 100;
-    return (type_preference << 24) + (local_preference << 8) + (256 - component_id);
-}
-
 static SdpAttrCandidate::Ptr
 makeIceCandidate(std::string ip, uint16_t port, uint32_t priority = 100, const std::string& proto = "udp", const std::string& type = "host") {
     auto candidate = std::make_shared<SdpAttrCandidate>();
@@ -196,9 +181,13 @@ makeIceCandidate(std::string ip, uint16_t port, uint32_t priority = 100, const s
     candidate->address = std::move(ip);
     candidate->port = port;
     candidate->type = type;
+
+#if 0
     if (type != "host") {
-        // candidate->arr.push_back(std::make_pair("raddr", candidate._base_addr._host));
+        candidate->arr.push_back(std::make_pair("raddr", candidate._base_addr._host));
     }
+#endif
+
     if (proto == "tcp") {
         candidate->type += " tcptype passive";
     }
@@ -343,8 +332,7 @@ void WebRtcTransport::onIceTransportGatheringCandidate(IceTransport::Pair::Ptr p
 
     if (_on_gathering_candidate) {
         auto type = mappingCandidateTypeEnum2Str(candidate._type);
-        auto priority  = calIceCandidatePriority(candidate._type, 1);
-        auto sdpAttrCandidate = makeIceCandidate(candidate._addr._host, candidate._addr._port, priority, "udp", type);
+        auto sdpAttrCandidate = makeIceCandidate(candidate._addr._host, candidate._addr._port, candidate._priority, "udp", type);
         _on_gathering_candidate(getIdentifier(), sdpAttrCandidate->toString(), candidate._ufrag, candidate._pwd);
     }
 }

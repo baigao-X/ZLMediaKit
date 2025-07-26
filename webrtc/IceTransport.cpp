@@ -38,8 +38,27 @@ static onceToken token([]() {
     mINI::Instance()[kPortRange] = "50000-65000";
 });
 
-////////////  IceServerInfo //////////////////////////
+static uint32_t calIceCandidatePriority(CandidateInfo::AddressType type, uint32_t component_id = 1) {
+    uint32_t type_preference;
+    switch (type) {
+        case CandidateInfo::AddressType::HOST: type_preference = 126;  break;
+        case CandidateInfo::AddressType::PRFLX: type_preference = 110; break;
+        case CandidateInfo::AddressType::SRFLX: type_preference = 100; break;
+        case CandidateInfo::AddressType::RELAY: type_preference = 0; break;
+        default: throw std::invalid_argument(StrPrinter << "not support type :" << (uint32_t)type);
+    }
 
+    uint32_t local_preference = 100;
+    return (type_preference << 24) + (local_preference << 8) + (256 - component_id);
+}
+
+static uint32_t calCandidatePairPriority(uint32_t G, uint32_t D) {
+    uint32_t min_p = (G < D) ? G : D;
+    uint32_t max_p = (G > D) ? G : D;
+    return ((uint64_t)min_p << 32) | (2 * (uint64_t)max_p) | (G > D ? 1 : 0);
+}
+
+////////////  IceServerInfo //////////////////////////
 void IceServerInfo::parse(const std::string &url_in) {
     DebugL << url_in;
 
@@ -1606,8 +1625,8 @@ void IceAgent::handleChannelData(uint16_t channel_number, const char* data, size
     _listener->onIceTransportRecvData(buffer, pair);
 }
 
-
 void IceAgent::onGatheringCandidate(Pair::Ptr pair, CandidateInfo candidate) {
+    candidate._priority = calIceCandidatePriority(candidate._type);
     InfoL << " get local candidate type "  << candidate.getAddressTypeStr() << " : " << candidate._addr._host << ":" << candidate._addr._port;
 
     auto ret = _local_candidates.emplace(candidate);
@@ -1771,7 +1790,7 @@ void IceAgent::refreshPermissions() {
         }
     }
 
-    // 对于即将过期的权限（例如还有1分钟过期），刷新它们
+    // 对于
     for (auto& permission : _permissions) {
         if (now - permission.second > 4 * 60 * 1000) {
             // 创建一个新的权限请求
