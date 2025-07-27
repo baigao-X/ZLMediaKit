@@ -29,17 +29,21 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <memory>
 #include <unordered_map>
 #include <map>
+#include <algorithm>
 #include "Poller/EventPoller.h"
 #include "Network/Socket.h"
 #include "Network/UdpClient.h"
 
 namespace RTC {
 
+uint64_t calCandidatePairPriority(uint32_t G, uint32_t D);
+
 class CandidateAddr {
 public:
     std::string _host;
     uint16_t    _port = 0;
 };
+
 
 class CandidateTuple {
 public:
@@ -385,6 +389,25 @@ class IceAgent : public IceTransport {
 
 public:
     using Ptr = std::shared_ptr<IceAgent>;
+    
+    // 候选者对信息结构
+    struct CandidatePair {
+        Pair::Ptr _local_pair;                // 本地候选者对
+        CandidateInfo _remote_candidate;      // 远程候选者信息
+        CandidateInfo _local_candidate;       // 本地候选者信息
+        uint64_t _priority;                   // 候选者对优先级（64位，符合RFC 8445）
+        CandidateInfo::State _state;          // 连通性检查状态
+        
+        CandidatePair(Pair::Ptr local_pair, const CandidateInfo& remote, const CandidateInfo& local) 
+            : _local_pair(local_pair), _remote_candidate(remote), _local_candidate(local), _state(CandidateInfo::State::Frozen) {
+            _priority = calCandidatePairPriority(local._priority, remote._priority);
+        }
+        
+        // 比较操作符，用于优先级排序（高优先级在前）
+        bool operator<(const CandidatePair& other) const {
+            return _priority > other._priority;
+        }
+    };
 
     enum class State {
         //checklist state and ice session state
@@ -457,7 +480,8 @@ public:
     void setSelectedPair(Pair::Ptr pair);
 
 protected:
-    void gatheringCandidates(Pair::Ptr pair, IceServerInfo::Ptr ice_server);
+    void gatheringSrflxCandidates(Pair::Ptr pair);
+    void gatheringRealyCandidates(Pair::Ptr pair);
     void localRealyedConnectivityChecks(CandidateInfo candidate);
     void connectivityChecks(Pair::Ptr pair, CandidateTuple candidate);
     void tryTriggerredChecks(Pair::Ptr pair);
@@ -490,6 +514,11 @@ protected:
     void sendSendIndication(const sockaddr_storage& peer_addr, toolkit::Buffer::Ptr buffer, Pair::Ptr pair);
     void sendRealyPacket(toolkit::Buffer::Ptr buffer, Pair::Ptr pair, bool flush);
 
+private:
+
+    CandidateInfo getLocalCandidateInfo(Pair::Ptr local_pair);
+    void addToChecklist(Pair::Ptr local_pair, CandidateInfo& remote_candidate);
+
 protected:
     IceServerInfo::Ptr _ice_server;
 
@@ -507,20 +536,146 @@ protected:
     StunPacket::Ptr _nominated_response = nullptr;
     std::weak_ptr<Pair>  _last_selected_pair;
 
+    // 双向索引的候选地址管理结构
+    struct SocketCandidateManager {
+        // socket -> candidates 的一对多映射
+        std::unordered_map<toolkit::SocketHelper::Ptr, std::vector<CandidateInfo>> socket_to_candidates;
+        
+        // candidate -> socket 的映射（用于快速查找）
+        std::unordered_map<CandidateInfo, toolkit::SocketHelper::Ptr, CandidateTuple::ClassHash, CandidateTuple::ClassEqual> candidate_to_socket;
+        
+        // 按类型分组的socket列表，方便遍历
+        std::vector<toolkit::SocketHelper::Ptr> _host_sockets;    // HOST类型socket
+        std::vector<toolkit::SocketHelper::Ptr> _relay_sockets;   // RELAY类型socket
+
+        bool _has_realyed_cnadidate = false;
+        
+        // 添加映射关系，带5元组重复检查
+        bool addMapping(toolkit::SocketHelper::Ptr socket, const CandidateInfo& candidate) {
+            // 检查5元组是否已存在
+            if (candidate_to_socket.find(candidate) != candidate_to_socket.end()) {
+                return false; // 已存在相同的5元组
+            }
+            
+            socket_to_candidates[socket].push_back(candidate);
+            candidate_to_socket[candidate] = socket;
+            
+            // 按类型分组
+            if (candidate._type != CandidateInfo::AddressType::RELAY) {
+                if (std::find(_host_sockets.begin(), _host_sockets.end(), socket) == _host_sockets.end()) {
+                    _host_sockets.push_back(socket);
+                }
+            } else if (candidate._type == CandidateInfo::AddressType::RELAY) {
+                if (std::find(_relay_sockets.begin(), _relay_sockets.end(), socket) == _relay_sockets.end()) {
+                    _relay_sockets.push_back(socket);
+                }
+            }
+            
+            return true;
+        }
+        
+        // 获取socket对应的所有candidates
+        std::vector<CandidateInfo> getCandidates(toolkit::SocketHelper::Ptr socket) const {
+            auto it = socket_to_candidates.find(socket);
+            return (it != socket_to_candidates.end()) ? it->second : std::vector<CandidateInfo>();
+        }
+        
+        // 获取candidate对应的socket
+        toolkit::SocketHelper::Ptr getSocket(const CandidateInfo& candidate) const {
+            auto it = candidate_to_socket.find(candidate);
+            return (it != candidate_to_socket.end()) ? it->second : nullptr;
+        }
+        
+        // 获取所有socket（便于遍历）
+        std::vector<toolkit::SocketHelper::Ptr> getAllSockets() const {
+            std::vector<toolkit::SocketHelper::Ptr> result;
+            result.reserve(_host_sockets.size() + _relay_sockets.size());
+            result.insert(result.end(), _host_sockets.begin(), _host_sockets.end());
+            result.insert(result.end(), _relay_sockets.begin(), _relay_sockets.end());
+            return result;
+        }
+        
+        // 获取所有candidates（便于遍历）
+        std::vector<CandidateInfo> getAllCandidates() const {
+            std::vector<CandidateInfo> result;
+            for (const auto& pair : candidate_to_socket) {
+                result.push_back(pair.first);
+            }
+            return result;
+        }
+        
+        // 直接添加host socket
+        void addHostSocket(toolkit::SocketHelper::Ptr socket) {
+            if (std::find(_host_sockets.begin(), _host_sockets.end(), socket) == _host_sockets.end()) {
+                _host_sockets.push_back(socket);
+            }
+        }
+        
+        // 直接添加relay socket
+        void addRelaySocket(toolkit::SocketHelper::Ptr socket) {
+            if (std::find(_relay_sockets.begin(), _relay_sockets.end(), socket) == _relay_sockets.end()) {
+                _relay_sockets.push_back(socket);
+            }
+        }
+        
+        // 获取host sockets
+        const std::vector<toolkit::SocketHelper::Ptr>& getHostSockets() const {
+            return _host_sockets;
+        }
+        
+        // 获取relay sockets
+        const std::vector<toolkit::SocketHelper::Ptr>& getRelaySockets() const {
+            return _relay_sockets;
+        }
+        
+        // 移除host socket
+        void removeHostSocket(toolkit::SocketHelper::Ptr socket) {
+            auto it = std::find(_host_sockets.begin(), _host_sockets.end(), socket);
+            if (it != _host_sockets.end()) {
+                _host_sockets.erase(it);
+            }
+        }
+        
+        // 移除relay socket
+        void removeRelaySocket(toolkit::SocketHelper::Ptr socket) {
+            auto it = std::find(_relay_sockets.begin(), _relay_sockets.end(), socket);
+            if (it != _relay_sockets.end()) {
+                _relay_sockets.erase(it);
+            }
+        }
+        
+        // 清空host sockets
+        void clearHostSockets() {
+            _host_sockets.clear();
+        }
+        
+        // 清空relay sockets
+        void clearRelaySockets() {
+            _relay_sockets.clear();
+        }
+        
+        // 获取host socket数量
+        size_t getHostSocketCount() const {
+            return _host_sockets.size();
+        }
+        
+        // 获取relay socket数量
+        size_t getRelaySocketCount() const {
+            return _relay_sockets.size();
+        }
+    };
+
     //for GATHERING_CANDIDATES
-    using CandidateSet = std::unordered_set<CandidateInfo, CandidateTuple::ClassHash, CandidateTuple::ClassEqual>;
-    CandidateSet _local_candidates;
-    std::vector<toolkit::SocketHelper::Ptr> _sockets; //local sockets
-    bool _has_realyed_cnadidate = false;
+    SocketCandidateManager _socket_candidate_manager; //local candidates
 
     //for CONNECTIVITY_CHECKS
+    using CandidateSet = std::unordered_set<CandidateInfo, CandidateTuple::ClassHash, CandidateTuple::ClassEqual>;
     CandidateSet _remote_candidates;
-    using CandidatePair = std::pair<Pair::Ptr /* local candidate base*/, CandidateInfo /*remote candidate*/>;
-    std::vector<std::pair<CandidatePair, CandidateInfo::State>> _checklist;
+
+    //TODO:当前仅支持多数据流复用一个checklist
+    std::vector<CandidatePair> _checklist;
     std::vector<CandidatePair> _valid_list;
 
-    //当前仅支持多数据流复用一个checklist
-    // std::map<std::string /*componend Id*/, /*checklist*/>> _checklist_set;
 };
 
 } // namespace RTC

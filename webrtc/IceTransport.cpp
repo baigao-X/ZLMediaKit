@@ -19,6 +19,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #include <utility>
 #include <random>
+#include <algorithm>
 #include "Util/onceToken.h"
 #include "Common/Parser.h"
 #include "Common/config.h"
@@ -52,7 +53,7 @@ static uint32_t calIceCandidatePriority(CandidateInfo::AddressType type, uint32_
     return (type_preference << 24) + (local_preference << 8) + (256 - component_id);
 }
 
-static uint32_t calCandidatePairPriority(uint32_t G, uint32_t D) {
+uint64_t calCandidatePairPriority(uint32_t G, uint32_t D) {
     uint32_t min_p = (G < D) ? G : D;
     uint32_t max_p = (G > D) ? G : D;
     return ((uint64_t)min_p << 32) | (2 * (uint64_t)max_p) | (G > D ? 1 : 0);
@@ -693,7 +694,7 @@ bool IceServer::processSocketData(const uint8_t* data, size_t len, Pair::Ptr pai
 }
 
 void IceServer::processRealyPacket(const Buffer::Ptr &buffer, Pair::Ptr pair) {
-    // TraceL << pair->get_local_ip() <<":" << pair->get_local_port() << " <- " << pair->get_peer_ip() << ":" << pair->get_peer_port();
+    TraceL << pair->get_local_ip() <<":" << pair->get_local_port() << " <- " << pair->get_peer_ip() << ":" << pair->get_peer_port();
 
     sockaddr_storage peer_addr;
     pair->get_peer_addr(peer_addr);
@@ -1062,7 +1063,8 @@ void IceAgent::gatheringCandidates(IceServerInfo::Ptr ice_server) {
             continue;
         }
 
-        if (obj["name"]  != "ens33") {
+        //ONLY FOR DEBUG
+        if (obj["name"] != "ens33") {
             DebugL << "skip interace: " << obj["name"];
             continue;
         }
@@ -1075,34 +1077,38 @@ void IceAgent::gatheringCandidates(IceServerInfo::Ptr ice_server) {
         candidate._pwd = getPassword();
 
         auto socket = createSocket(ice_server->_transport, ice_server->_addr._host, ice_server->_addr._port, obj["ip"]);
+        _socket_candidate_manager.addHostSocket(socket);
         candidate._addr._port = socket->get_local_port();
         candidate._base_addr._port = candidate._addr._port;
 
-        TraceL << "gathering local candidate " << candidate._addr._host << ":" << candidate._addr._port 
-            << " from stun server " << ice_server->_addr._host << ":" << ice_server->_addr._port;
+        // TraceL << "gathering local candidate " << candidate._addr._host << ":" << candidate._addr._port 
+            // << " from stun server " << ice_server->_addr._host << ":" << ice_server->_addr._port;
 
         auto pair = std::make_shared<Pair>(socket);
         onGatheringCandidate(pair, candidate);
-        _sockets.push_back(socket);
-        gatheringCandidates(pair, ice_server);
+        gatheringSrflxCandidates(pair);
+
+        if (ice_server->_schema == IceServerInfo::SchemaType::TURN) {
+            auto realy_socket = createSocket(ice_server->_transport, ice_server->_addr._host, ice_server->_addr._port, obj["ip"]);
+            _socket_candidate_manager.addRelaySocket(realy_socket);
+            gatheringRealyCandidates(std::make_shared<Pair>(realy_socket));
+        }
     }
+    return;
 }
 
 void IceAgent::connectivityChecks(CandidateInfo candidate) {
-    // TraceL;
+    TraceL;
 
     setState(IceAgent::State::Running);
     auto ret = _remote_candidates.emplace(candidate);
     if (ret.second) {
-        for (auto socket: _sockets) {
-            InfoL << "connectivity check cnadidate pair, local: " << socket->get_local_ip() << ":" << socket->get_local_port() << " remote type: " << candidate.getAddressTypeStr() << " " << candidate._addr._host << ":" << candidate._addr._port;
+        for (auto socket: _socket_candidate_manager._host_sockets) {
             auto pair = std::make_shared<Pair>(socket, candidate._addr._host, candidate._addr._port);
-            auto candidate_pair = std::make_pair(pair, candidate);
-            _checklist.push_back(std::make_pair(candidate_pair, CandidateInfo::State::InProgress));
-            connectivityChecks(std::make_shared<Pair>(*pair), candidate);
+            addToChecklist(pair, candidate);
         }
 
-        if (_has_realyed_cnadidate) {
+        if (_socket_candidate_manager._has_realyed_cnadidate) {
             localRealyedConnectivityChecks(candidate);
         }
     }
@@ -1111,19 +1117,15 @@ void IceAgent::connectivityChecks(CandidateInfo candidate) {
 }
 
 void IceAgent::localRealyedConnectivityChecks(CandidateInfo candidate) {
-    // TraceL;
-
-    for (auto socket: _sockets) {
+    TraceL;
+    for (auto socket: _socket_candidate_manager._relay_sockets) {
         auto local_realy_pair = std::make_shared<Pair>(socket, _ice_server->_addr._host, _ice_server->_addr._port);
         auto peer_addr = SockUtil::make_sockaddr(candidate._addr._host.data(), candidate._addr._port);
         sendCreatePermissionRequest(local_realy_pair, peer_addr);
 
         local_realy_pair->_realyed_addr = std::make_shared<sockaddr_storage>();
         memcpy(local_realy_pair->_realyed_addr.get(), &peer_addr, sizeof(peer_addr));
-        auto local_realy_candidate_pair = std::make_pair(local_realy_pair, candidate);
-        _checklist.push_back(std::make_pair(local_realy_candidate_pair, CandidateInfo::State::InProgress));
-
-        connectivityChecks(local_realy_pair, candidate);
+        addToChecklist(local_realy_pair, candidate);
     }
     return;
 }
@@ -1153,14 +1155,16 @@ void IceAgent::sendSendIndication(const sockaddr_storage& peer_addr, toolkit::Bu
 }
 
 
-void IceAgent::gatheringCandidates(Pair::Ptr pair, IceServerInfo::Ptr ice_server) {
+void IceAgent::gatheringSrflxCandidates(Pair::Ptr pair) {
     // TraceL;
     auto handle = std::bind(&IceAgent::handleGatheringCandidatesResponse, this, placeholders::_1, placeholders::_2);
-    if (ice_server->_schema == IceServerInfo::SchemaType::TURN) {
-        sendAllocateRequest(pair);
-    } else {
-        sendBindRequest(pair, handle);
-    }
+    sendBindRequest(pair, handle);
+    return;
+}
+
+void IceAgent::gatheringRealyCandidates(Pair::Ptr pair) {
+    // TraceL;
+    sendAllocateRequest(pair);
     return;
 }
 
@@ -1504,6 +1508,7 @@ void IceAgent::handleAllocateResponse(const StunPacket::Ptr packet, Pair::Ptr pa
         sendErrorResponse(packet, pair, StunAttrErrorCode::Code::BadRequest);
     }
 
+#if 0
     CandidateInfo candidate;
     candidate._type = CandidateInfo::AddressType::SRFLX;
     candidate._addr._host = srflx->getAddrString();
@@ -1513,19 +1518,27 @@ void IceAgent::handleAllocateResponse(const StunPacket::Ptr packet, Pair::Ptr pa
     candidate._ufrag = getUfrag();
     candidate._pwd = getPassword();
     onGatheringCandidate(pair, candidate);
+#endif
 
     auto relay = static_pointer_cast<StunAttrXorRelayedAddress>(packet->getAttribute(StunAttribute::Type::XOR_RELAYED_ADDRESS));
-    if (relay) {
-        candidate._type = CandidateInfo::AddressType::RELAY;
-        candidate._addr._host = relay->getAddrString();
-        candidate._addr._port = relay->getPort();
-        candidate._base_addr._host = candidate._addr._host;
-        candidate._base_addr._port = candidate._addr._port;
-        candidate._ufrag = getUfrag();
-        candidate._pwd = getPassword();
-        onGatheringCandidate(pair, candidate);
+    if (!relay) {
+        WarnL << "Binding request missing XOR_RELAYED_ADDRESS attribute";
+        sendErrorResponse(packet, pair, StunAttrErrorCode::Code::BadRequest);
     }
 
+    CandidateInfo candidate;
+    candidate._type = CandidateInfo::AddressType::RELAY;
+    candidate._addr._host = relay->getAddrString();
+    candidate._addr._port = relay->getPort();
+    candidate._base_addr._host = candidate._addr._host;
+    candidate._base_addr._port = candidate._addr._port;
+    candidate._ufrag = getUfrag();
+    candidate._pwd = getPassword();
+
+    TraceL << "get local candidate type "  << candidate.getAddressTypeStr() << " : " << candidate._addr._host << ":" << candidate._addr._port
+        << ", by srflx addr " << srflx->getAddrString() << " : " << srflx->getPort()
+        << ", by host addr " << pair->get_local_ip() << " : " << pair->get_local_port();
+    onGatheringCandidate(pair, candidate);
     return;
 }
 
@@ -1558,8 +1571,13 @@ void IceAgent::handleChannelBindResponse(const StunPacket::Ptr packet, Pair::Ptr
         return;
     }
 
+    InfoL << "ChannelBind success, channel_number=" << channel_number 
+          << ", peer_addr=" << SockUtil::inet_ntoa((const struct sockaddr*)&peer_addr) << ":" << SockUtil::inet_port((const struct sockaddr*)&peer_addr)
+          << ", pair: " << pair->get_local_ip() << ":" << pair->get_local_port() 
+          << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port()
+          << (!pair->get_realyed_ip().empty() ? (" realyed_addr: " + pair->get_realyed_ip() + ":" + to_string(pair->get_realyed_port())) : "");
+
     addChannelBind(channel_number, peer_addr);
-    // DebugL << "ChannelBind successfully";
     return;
 }
 
@@ -1627,10 +1645,10 @@ void IceAgent::handleChannelData(uint16_t channel_number, const char* data, size
 
 void IceAgent::onGatheringCandidate(Pair::Ptr pair, CandidateInfo candidate) {
     candidate._priority = calIceCandidatePriority(candidate._type);
-    InfoL << " get local candidate type "  << candidate.getAddressTypeStr() << " : " << candidate._addr._host << ":" << candidate._addr._port;
+    InfoL << "get local candidate type "  << candidate.getAddressTypeStr() << " : " << candidate._addr._host << ":" << candidate._addr._port;
 
-    auto ret = _local_candidates.emplace(candidate);
-    if (!ret.second) {
+    // 使用_socket_candidate_manager替代_local_candidates进行5元组重复检查
+    if (!_socket_candidate_manager.addMapping(pair->_socket, candidate)) {
         InfoL << "has same 5 tuple, skip";
         return;
     }
@@ -1639,7 +1657,7 @@ void IceAgent::onGatheringCandidate(Pair::Ptr pair, CandidateInfo candidate) {
 
     //如果是REALY,当前的所有PEER Candidate进行CreatePermission
     if (candidate._type == CandidateInfo::AddressType::RELAY) {
-        _has_realyed_cnadidate = true;
+        _socket_candidate_manager._has_realyed_cnadidate = true;
         for (auto remote_candidate : _remote_candidates) {
             localRealyedConnectivityChecks(remote_candidate);
         }
@@ -1661,17 +1679,20 @@ void IceAgent::onConnected(IceTransport::Pair::Ptr pair) {
 
     TraceL << "checklist size: " << _checklist.size();
     //判断ConnectivityCheck的pair是否在checklist中,存在的话加入到validlist
-    for (auto &it : _checklist) {
-        auto &candidate_pair = it.first;
-        auto &pair_it = candidate_pair.first;
-        auto &remote_candidate = candidate_pair.second;
-        auto &state = it.second;
+    for (auto &pair_info : _checklist) {
+        auto &pair_it = pair_info._local_pair;
+        auto &remote_candidate = pair_info._remote_candidate;
+        auto &state = pair_info._state;
 
-        TraceL << "check pair: " << remote_candidate.getAddressTypeStr() << " candidate, "
-              << pair_it->get_local_ip() << ":" << pair_it->get_local_port()
-              << " <-> " << pair_it->get_peer_ip() << ":" << pair_it->get_peer_port()
-              << (!pair_it->get_realyed_ip().empty() ? (" realyed addr: " + pair_it->get_realyed_ip() + ":" 
-              + to_string(pair_it->get_realyed_port())) : " ");
+        TraceL << "check pair: "
+              << "local(" << pair_info._local_candidate.getAddressTypeStr() << ") " << pair_info._local_candidate._addr._host << ":" << pair_info._local_candidate._addr._port
+              << " <-> "
+              << "remote(" << pair_info._remote_candidate.getAddressTypeStr() << ") " << pair_info._remote_candidate._addr._host << ":" << pair_info._remote_candidate._addr._port
+            << ", pair info: " 
+            << pair_it->get_local_ip() << ":" << pair_it->get_local_port()
+            << " <-> " << pair_it->get_peer_ip() << ":" << pair_it->get_peer_port() 
+            << (!pair_it->get_realyed_ip().empty() ?  (" realyed addr: " + pair_it->get_realyed_ip() + ":" 
+            + to_string(pair_it->get_realyed_port())) : " ");
 
         //即使是新的Peer 反射地址,也已经添加到_checklist中了
         //所以肯定会在_checklist中找到匹配项
@@ -1681,11 +1702,10 @@ void IceAgent::onConnected(IceTransport::Pair::Ptr pair) {
 
         GET_CONFIG(bool, local_only_relayed, Rtc::kLocalOnlyRelayed);
         if (local_only_relayed && pair->_realyed_addr == nullptr) {
-            DebugL << "local only relayed, skip pair: " << remote_candidate.getAddressTypeStr() << " candidate, " 
-                << pair->get_local_ip() << ":" << pair->get_local_port()
-                << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port()
-                << (!pair->get_realyed_ip().empty() ?  (" realyed addr: " + pair->get_realyed_ip() + ":" 
-                + to_string(pair->get_realyed_port())) : " ");
+            DebugL << "local only relayed, skip pair: "
+                << "local(" << pair_info._local_candidate.getAddressTypeStr() << ") " << pair_info._local_candidate._addr._host << ":" << pair_info._local_candidate._addr._port
+                << " <-> "
+                << "remote(" << pair_info._remote_candidate.getAddressTypeStr() << ") " << pair_info._remote_candidate._addr._host << ":" << pair_info._remote_candidate._addr._port;           
             return;
         }
 
@@ -1698,21 +1718,21 @@ void IceAgent::onConnected(IceTransport::Pair::Ptr pair) {
         //如果开启只走转发路径,忽略除了REALY之外的candidate
         GET_CONFIG(bool, remote_only_relayed, Rtc::kRemoteOnlyRelayed);
         if (remote_only_relayed && CandidateInfo::AddressType::RELAY != remote_candidate._type) {
-            DebugL << "remote only relayed, skip pair type: " << remote_candidate.getAddressTypeStr() << " candidate, " 
-                << pair->get_local_ip() << ":" << pair->get_local_port()
-                << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port()
-                << (!pair->get_realyed_ip().empty() ?  (" realyed addr: " + pair->get_realyed_ip() + ":" 
-                + to_string(pair->get_realyed_port())) : " ");
+            DebugL << "remote only relayed, skip pair: "
+                << "local(" << pair_info._local_candidate.getAddressTypeStr() << ") " << pair_info._local_candidate._addr._host << ":" << pair_info._local_candidate._addr._port
+                << " <-> "
+                << "remote(" << pair_info._remote_candidate.getAddressTypeStr() << ") " << pair_info._remote_candidate._addr._host << ":" << pair_info._remote_candidate._addr._port;
             return;
         }
 
-        InfoL << "push type: " << remote_candidate.getAddressTypeStr() << " candidate to valid_list :" 
-            << pair->get_local_ip() << ":" << pair->get_local_port()
-            << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port()
-            << (!pair->get_realyed_ip().empty() ?  (" realyed addr: " + pair->get_realyed_ip() + ":" 
-            + to_string(pair->get_realyed_port())) : " ");
+        InfoL << "push "
+            << "local(" << pair_info._local_candidate.getAddressTypeStr() << ") " << pair_info._local_candidate._addr._host << ":" << pair_info._local_candidate._addr._port
+            << " <-> "
+            << "remote(" << pair_info._remote_candidate.getAddressTypeStr() << ") " << pair_info._remote_candidate._addr._host << ":" << pair_info._remote_candidate._addr._port
+            << " to valid_list";
 
-        _valid_list.push_back(candidate_pair);
+        // 直接将候选者对添加到valid_list
+        _valid_list.push_back(pair_info);
 
         if (getRole() == Role::Controlling) {
             if (getState() != IceAgent::State::Completed) {
@@ -1730,14 +1750,16 @@ void IceAgent::onConnected(IceTransport::Pair::Ptr pair) {
 void IceAgent::onCompleted(IceTransport::Pair::Ptr pair) {
     // TraceL;
     bool found_in_valid_list = false;
-    CandidateInfo info;
+    CandidateInfo local_candidate_info;
+    CandidateInfo remote_candidate_info;
     if (getImplementation() == Implementation::Full) {
         for (auto &candidate_pair : _valid_list) {
-            auto &pair_it = candidate_pair.first;
-            auto &remote_candidate = candidate_pair.second;
+            auto &pair_it = candidate_pair._local_pair;
+            auto &remote_candidate = candidate_pair._remote_candidate;
 
             if (Pair::is_same(pair_it.get(), pair.get())) {
-                info._type = candidate_pair.second._type;
+                local_candidate_info = candidate_pair._local_candidate;
+                remote_candidate_info = candidate_pair._remote_candidate;
                 found_in_valid_list = true;
                 break;
             }
@@ -1756,9 +1778,12 @@ void IceAgent::onCompleted(IceTransport::Pair::Ptr pair) {
 
     if (found_in_valid_list && getState() != IceAgent::State::Completed) {
         InfoL << "select pair: "
-            << "type: " << info.getAddressTypeStr() << " "
+            << "local(" << local_candidate_info.getAddressTypeStr() << ") " << local_candidate_info._addr._host << ":" << local_candidate_info._addr._port
+            << " <-> "
+            << "remote(" << remote_candidate_info.getAddressTypeStr() << ") " << remote_candidate_info._addr._host << ":" << remote_candidate_info._addr._port
+            << ", pair info: " 
             << pair->get_local_ip() << ":" << pair->get_local_port()
-            << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port()
+            << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port() 
             << (!pair->get_realyed_ip().empty() ?  (" realyed addr: " + pair->get_realyed_ip() + ":" 
             + to_string(pair->get_realyed_port())) : " ");
 
@@ -1795,7 +1820,7 @@ void IceAgent::refreshPermissions() {
         if (now - permission.second > 4 * 60 * 1000) {
             // 创建一个新的权限请求
             sockaddr_storage addr = permission.first;
-            for (auto& socket : _sockets) {
+            for (auto& socket : _socket_candidate_manager._relay_sockets) {
                 auto pair = std::make_shared<Pair>(socket);
                 sendCreatePermissionRequest(pair, addr);
                 break; // 只需要使用一个本地候选项发送请求
@@ -1827,7 +1852,7 @@ void IceAgent::refreshChannelBindings() {
             auto it = _channel_bindings.find(channel_number);
             if (it != _channel_bindings.end()) {
                 sockaddr_storage addr = it->second;
-                for (auto& socket : _sockets) {
+                for (auto& socket : _socket_candidate_manager._relay_sockets) {
                     auto pair = std::make_shared<Pair>(socket);
                     sendChannelBindRequest(pair, channel_number, addr);
                     break; // 只需要使用一个本地候选项发送请求
@@ -1880,6 +1905,43 @@ void IceAgent::sendRealyPacket(toolkit::Buffer::Ptr buffer, Pair::Ptr pair, bool
     } else {
         sendSendIndication(*peer_addr, buffer, pair);
     }
+    return;
+}
+
+CandidateInfo IceAgent::getLocalCandidateInfo(Pair::Ptr pair) {
+    // 从socket_candidate_manager中查找对应的本地候选者信息
+    for (const auto& socket_candidates : _socket_candidate_manager.socket_to_candidates) {
+        if (socket_candidates.first == pair->_socket) {
+            // 找到对应socket的候选者列表，选择第一个作为默认
+            if (!socket_candidates.second.empty()) {
+                return socket_candidates.second[0];
+            }
+        }
+    }
+
+    throw std::invalid_argument("No candidate found for the specified socket pair");
+}
+
+void IceAgent::addToChecklist(Pair::Ptr pair, CandidateInfo& remote_candidate) {
+    try {
+        CandidateInfo local_candidate = getLocalCandidateInfo(pair);
+        CandidatePair pair_info(std::make_shared<Pair>(*pair), remote_candidate, local_candidate);
+        pair_info._state = CandidateInfo::State::InProgress;
+        _checklist.push_back(pair_info);
+        std::sort(_checklist.begin(), _checklist.end());
+        InfoL << "connectivity check cnadidate pair " 
+             << "local(" << local_candidate.getAddressTypeStr() << ") " << local_candidate._addr._host << ":" << local_candidate._addr._port 
+             << " <-> "
+             << "remote(" << remote_candidate.getAddressTypeStr() << ") " << remote_candidate._addr._host << ":" << remote_candidate._addr._port
+            << ", pair info: " 
+            << pair->get_local_ip() << ":" << pair->get_local_port()
+            << " <-> " << pair->get_peer_ip() << ":" << pair->get_peer_port() 
+            << (!pair->get_realyed_ip().empty() ?  (" realyed addr: " + pair->get_realyed_ip() + ":" 
+            + to_string(pair->get_realyed_port())) : " ");
+
+
+        connectivityChecks(std::make_shared<Pair>(*pair), remote_candidate);
+    } catch (...) { }
     return;
 }
 
