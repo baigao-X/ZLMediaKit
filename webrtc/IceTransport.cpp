@@ -33,6 +33,10 @@ using namespace std;
 
 namespace RTC {
 
+// 定义RequestInfo的静态常量成员
+const uint32_t IceTransport::RequestInfo::INITIAL_RTO;
+const uint32_t IceTransport::RequestInfo::MAX_RETRIES;
+
 #define RTC_FIELD "rtc."
 const string kPortRange = RTC_FIELD "port_range";
 static onceToken token([]() {
@@ -124,6 +128,20 @@ IceTransport::IceTransport(Listener* listener, const std::string& ufrag, const s
                               std::bind(&IceTransport::handleBindingRequest, this, placeholders::_1, placeholders::_2));
 }
 
+void IceTransport::initialize() {
+    weak_ptr<IceTransport> weak_self = static_pointer_cast<IceTransport>(shared_from_this());
+    _retry_timer = std::make_shared<Timer>(
+        0.1f, [weak_self]() {
+            auto strong_self = weak_self.lock();
+            if (!strong_self) {
+                return false;
+            }
+            strong_self->checkRequestTimeouts();
+            return true;
+        }, getPoller()
+    );
+}
+
 void IceTransport::sendSocketData(toolkit::Buffer::Ptr buf, Pair::Ptr pair, bool flush) {
     return sendSocketData_l(buf, pair, flush);
 }
@@ -171,9 +189,10 @@ bool IceTransport::processSocketData(const uint8_t* data, size_t len, Pair::Ptr 
     // TraceL << pair->get_local_ip() <<":" << pair->get_local_port() << " <- " << pair->get_peer_ip() << ":" << pair->get_peer_port()
     //     << " data len: " << len;
     sockaddr_storage relay_peer_addr;
-    if (pair->get_realyed_addr(relay_peer_addr)) {
-        DebugL << "data relay from peer " << SockUtil::inet_ntoa((const struct sockaddr*)&relay_peer_addr) << ":" << SockUtil::inet_port((const struct sockaddr*)&relay_peer_addr);
-    }
+
+    // if (pair->get_realyed_addr(relay_peer_addr)) {
+    //     TraceL << "data relay from peer " << SockUtil::inet_ntoa((const struct sockaddr*)&relay_peer_addr) << ":" << SockUtil::inet_port((const struct sockaddr*)&relay_peer_addr);
+    // }
 
     auto packet = RTC::StunPacket::parse((const uint8_t *)data, len);
     if (packet) {
@@ -243,9 +262,11 @@ void IceTransport::processResponse(const StunPacket::Ptr packet, Pair::Ptr pair)
         return;
     }
 
-    auto request = it->second.first;
-    auto handle = it->second.second;
+    auto request = it->second._request;
+    auto handle = it->second._handler;
+    // 收到响应后立即清理请求信息
     _response_handlers.erase(packet->getTransactionId().data());
+    
     if (packet->getClass() == StunPacket::Class::ERROR_RESPONSE) {
         if (StunAttrErrorCode::Code::Unauthorized == packet->getErrorCode()) {
             return processUnauthorizedResponse(packet, request, pair, handle);
@@ -374,12 +395,12 @@ void IceTransport::sendChannelData(uint16_t channel_number, const Buffer::Ptr& b
     memcpy(channel_data->data() + 4, buffer->data(), data_len);
     channel_data->setSize(total_len);
 
-    DebugL << "send channel data: channel_number=" << channel_number 
-           << ", data_len=" << data_len
-           << ", " << pair->get_local_ip() << ":" << pair->get_local_port() 
-           << " -> " << pair->get_peer_ip() << ":" << pair->get_peer_port();
+    // TraceL << "send channel data: channel_number=" << channel_number 
+    //        << ", data_len=" << data_len
+    //        << ", " << pair->get_local_ip() << ":" << pair->get_local_port() 
+    //        << " -> " << pair->get_peer_ip() << ":" << pair->get_peer_port();
  
-    // DebugL << "data: " << hexdump(buffer->data(), buffer->size());
+    // TraceL << "data: " << hexdump(buffer->data(), buffer->size());
     sendSocketData(channel_data, pair);
     return;
 }
@@ -401,7 +422,8 @@ void IceTransport::sendErrorResponse(const StunPacket::Ptr packet, Pair::Ptr pai
 
 void IceTransport::sendRequest(const StunPacket::Ptr packet, Pair::Ptr pair, MsgHandler handler) {
     // TraceL;
-    _response_handlers.emplace(packet->getTransactionId().data(), std::make_pair(packet, handler));
+    // 使用新的RequestInfo结构存储请求信息
+    _response_handlers.emplace(packet->getTransactionId().data(), RequestInfo(packet, handler, pair));
     sendPacket(packet, pair);
     return;
 }
@@ -686,6 +708,10 @@ IceServer::IceServer(Listener* listener, const std::string& ufrag, const std::st
 
 }
 
+void IceServer::initialize() {
+    IceTransport::initialize();
+}
+
 bool IceServer::processSocketData(const uint8_t* data, size_t len, Pair::Ptr pair) {
     if (!_session_pair) {
         _session_pair = pair;
@@ -694,7 +720,7 @@ bool IceServer::processSocketData(const uint8_t* data, size_t len, Pair::Ptr pai
 }
 
 void IceServer::processRealyPacket(const Buffer::Ptr &buffer, Pair::Ptr pair) {
-    TraceL << pair->get_local_ip() <<":" << pair->get_local_port() << " <- " << pair->get_peer_ip() << ":" << pair->get_peer_port();
+    // TraceL << pair->get_local_ip() <<":" << pair->get_local_port() << " <- " << pair->get_peer_ip() << ":" << pair->get_peer_port();
 
     sockaddr_storage peer_addr;
     pair->get_peer_addr(peer_addr);
@@ -1052,6 +1078,10 @@ IceAgent::IceAgent(Listener* listener, Implementation implementation, Role role,
     );
 }
 
+void IceAgent::initialize() {
+    IceTransport::initialize();
+}
+
 void IceAgent::gatheringCandidates(IceServerInfo::Ptr ice_server) {
     // TraceL;
     _ice_server = ice_server;
@@ -1059,12 +1089,6 @@ void IceAgent::gatheringCandidates(IceServerInfo::Ptr ice_server) {
     auto interfaces = SockUtil::getInterfaceList();
     for (auto obj : interfaces) {
         if (obj["name"]  == "lo") {
-            DebugL << "skip interace: " << obj["name"];
-            continue;
-        }
-
-        //ONLY FOR DEBUG
-        if (obj["name"] != "ens33") {
             DebugL << "skip interace: " << obj["name"];
             continue;
         }
@@ -1550,7 +1574,6 @@ void IceAgent::handleCreatePermissionResponse(const StunPacket::Ptr packet, Pair
         return;
     }
 
-    
     // TraceL << "CreatePermission successfully";
 
     static uint16_t next_channel = 0x4000; // 有效范围是 0x4000-0x7FFF
@@ -1929,6 +1952,13 @@ void IceAgent::addToChecklist(Pair::Ptr pair, CandidateInfo& remote_candidate) {
         pair_info._state = CandidateInfo::State::InProgress;
         _checklist.push_back(pair_info);
         std::sort(_checklist.begin(), _checklist.end());
+        //TODO: FIXME
+        if (local_candidate._type != CandidateInfo::AddressType::RELAY 
+            || remote_candidate._type != CandidateInfo::AddressType::RELAY)  {
+            WarnL  << "testing siip";
+            return;
+        }
+
         InfoL << "connectivity check cnadidate pair " 
              << "local(" << local_candidate.getAddressTypeStr() << ") " << local_candidate._addr._host << ":" << local_candidate._addr._port 
              << " <-> "
@@ -1943,6 +1973,49 @@ void IceAgent::addToChecklist(Pair::Ptr pair, CandidateInfo& remote_candidate) {
         connectivityChecks(std::make_shared<Pair>(*pair), remote_candidate);
     } catch (...) { }
     return;
+}
+
+void IceTransport::checkRequestTimeouts() {
+    uint64_t now = toolkit::getCurrentMillisecond();
+    
+    for (auto it = _response_handlers.begin(); it != _response_handlers.end();) {
+        auto& transaction_id = it->first;
+        auto& req_info = it->second;
+        
+        // 检查是否超时
+        if (now >= req_info._next_timeout) {
+            if (req_info._retry_count >= RequestInfo::MAX_RETRIES) {
+                // 超过最大重传次数，放弃请求并清理
+                WarnL << "STUN request timeout after " << RequestInfo::MAX_RETRIES 
+                      << " retries, transaction_id: " << hexdump(transaction_id.data(), transaction_id.size());
+                it = _response_handlers.erase(it);
+                continue;
+            } else {
+                // 执行重传
+                retransmitRequest(transaction_id, req_info);
+            }
+        }
+        ++it;
+    }
+}
+
+void IceTransport::retransmitRequest(const std::string& transaction_id, RequestInfo& req_info) {
+    // 增加重传次数
+    req_info._retry_count++;
+    
+    // RTO翻倍（指数退避）
+    req_info._rto *= 2;
+    
+    // 计算下次超时时间
+    uint64_t now = toolkit::getCurrentMillisecond();
+    req_info._next_timeout = now + req_info._rto;
+    
+    DebugL << "Retransmitting STUN request (attempt " << req_info._retry_count 
+           << "/" << RequestInfo::MAX_RETRIES << "), RTO: " << req_info._rto 
+           << "ms, transaction_id: " << hexdump(transaction_id.data(), transaction_id.size());
+    
+    // 重新发送请求包
+    sendPacket(req_info._request, req_info._pair);
 }
 
 } // namespace RTC

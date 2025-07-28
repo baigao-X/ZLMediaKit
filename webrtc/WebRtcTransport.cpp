@@ -215,6 +215,7 @@ void WebRtcTransport::onCreate() {
 
     _ice_agent = std::make_shared<RTC::IceAgent>(this, implementation, role, _identifier, 
                                                  makeRandStr(24), getPoller());
+    _ice_agent->initialize();
 }
 
 void WebRtcTransport::onDestory() {

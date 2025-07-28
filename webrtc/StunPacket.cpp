@@ -595,7 +595,6 @@ StunPacket::Authentication StunPacket::checkAuthentication(const std::string& uf
     switch (_klass) {
         case Class::REQUEST: {
             if (!attr_message_integrity) {
-                DebugL << "00";
                 return Authentication::UNAUTHORIZED;
             }
 

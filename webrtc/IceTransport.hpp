@@ -33,6 +33,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include "Poller/EventPoller.h"
 #include "Network/Socket.h"
 #include "Network/UdpClient.h"
+#include "Poller/Timer.h"
 
 namespace RTC {
 
@@ -166,6 +167,7 @@ public:
     SchemaType    _schema = SchemaType::TURN;
 };
 
+
 class IceTransport : public std::enable_shared_from_this<IceTransport> {
 public:
     using Ptr = std::shared_ptr<IceTransport>;
@@ -284,9 +286,31 @@ public:
 
 public:
     using MsgHandler = std::function<void(StunPacket::Ptr, Pair::Ptr)>;
+    
+    struct RequestInfo {
+        StunPacket::Ptr _request;        // 原始请求包
+        MsgHandler _handler;             // 响应处理函数
+        Pair::Ptr _pair;                 // 发送对
+        uint64_t _send_time;             // 首次发送时间(毫秒)
+        uint64_t _next_timeout;          // 下次超时时间(毫秒)
+        uint32_t _retry_count;           // 当前重传次数
+        uint32_t _rto;                   // 当前RTO值(毫秒)
+
+        static const uint32_t INITIAL_RTO = 500;    // 初始RTO 500ms
+        static const uint32_t MAX_RETRIES = 7;      // 最大重传次数
+        
+        RequestInfo(StunPacket::Ptr req, MsgHandler h, Pair::Ptr p)
+            : _request(req), _handler(h), _pair(p), _retry_count(0), _rto(INITIAL_RTO) {
+            _send_time = toolkit::getCurrentMillisecond();
+            _next_timeout = _send_time + _rto;
+        }
+    };
 
     IceTransport(Listener* listener, const std::string& ufrag, const std::string& password, const toolkit::EventPoller::Ptr &poller);
     virtual ~IceTransport() {}
+    
+    // 初始化方法，必须在构造完成后调用
+    virtual void initialize();
 
     const toolkit::EventPoller::Ptr& getPoller() const { return _poller; }
     const std::string& getIdentifier() const { return _identifier; }
@@ -328,12 +352,15 @@ protected:
 
     toolkit::SocketHelper::Ptr createSocket(CandidateTuple::TransportType type, const std::string &peer_host, uint16_t peer_port, const std::string &local_ip, uint16_t local_port = 0);
     toolkit::SocketHelper::Ptr createUdpSocket(const std::string &target_host, uint16_t peer_port, const std::string &local_ip, uint16_t local_port);
+    
+    void checkRequestTimeouts();
+    void retransmitRequest(const std::string& transaction_id, RequestInfo& req_info);
 
 protected:
     std::string _identifier;
     toolkit::EventPoller::Ptr _poller;
     Listener* _listener = nullptr;
-    std::unordered_map<std::string /*transcation ID*/, std::pair<StunPacket::Ptr, MsgHandler>> _response_handlers;
+    std::unordered_map<std::string /*transcation ID*/, RequestInfo> _response_handlers;
     std::unordered_map<std::pair<StunPacket::Class, StunPacket::Method>, MsgHandler, StunPacket::ClassMethodHash> _request_handlers;
 
     // for local
@@ -347,6 +374,9 @@ protected:
     // For Channel Bind
     std::unordered_map<uint16_t /*channel number*/, sockaddr_storage /*peer ip:port*/> _channel_bindings;
     std::unordered_map<uint16_t /*channel number*/, uint64_t /*bind or fresh time*/> _channel_binding_times;
+    
+    // For STUN request retry
+    std::shared_ptr<toolkit::Timer> _retry_timer;
 };
 
 class IceServer : public IceTransport {
@@ -355,7 +385,8 @@ public:
     using WeakPtr = std::weak_ptr<IceServer>;
     IceServer(Listener* listener, const std::string& ufrag, const std::string& password, const toolkit::EventPoller::Ptr &poller);
     virtual ~IceServer() {}
-;
+    
+    void initialize() override;
     bool processSocketData(const uint8_t* data, size_t len, Pair::Ptr pair) override;
     void relayForwordingData(const toolkit::Buffer::Ptr& buffer, struct sockaddr_storage peer_addr);
     void relayBackingData(const toolkit::Buffer::Ptr& buffer, Pair::Ptr pair, struct sockaddr_storage peer_addr);
@@ -439,6 +470,8 @@ public:
              const std::string& ufrag, const std::string& password, 
              const toolkit::EventPoller::Ptr &poller);
     virtual ~IceAgent() {}
+    
+    void initialize() override;
 
     void gatheringCandidates(IceServerInfo::Ptr ice_server);
     void connectivityChecks(CandidateInfo candidate);
