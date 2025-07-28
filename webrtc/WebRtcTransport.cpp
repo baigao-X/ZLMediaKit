@@ -65,8 +65,7 @@ const string kEnableTurn = RTC_FIELD "enableTurn";
 // webrtc ice ufrag and pwd  [AUTO-TRANSLATED:2f0d1b3c]
 const string kIceUfrag = RTC_FIELD "iceUfrag";
 const string kIcePwd = RTC_FIELD "icePwd";
-const string kLocalOnlyRelayed = RTC_FIELD "localOnlyRelayed";
-const string kRemoteOnlyRelayed = RTC_FIELD "remoteOnlyRelayed";
+const string kIceTransportPolicy = RTC_FIELD "iceTransportPolicy";
 
 // 比特率设置  [AUTO-TRANSLATED:2c75f5bc]
 // Bitrate setting
@@ -94,8 +93,7 @@ static onceToken token([]() {
     mINI::Instance()[kSignalingPort] = 30000;
     mINI::Instance()[kIcePort] = 34780;
     mINI::Instance()[kEnableTurn] = 1;
-    mINI::Instance()[kLocalOnlyRelayed] = 0;
-    mINI::Instance()[kRemoteOnlyRelayed] = 0;
+    mINI::Instance()[kIceTransportPolicy] = 0;  // 默认值：不限制(kAll)
     mINI::Instance()[kIceUfrag] = "ZLMediaKit";
     mINI::Instance()[kIcePwd] = "ZLMediaKit";
 });

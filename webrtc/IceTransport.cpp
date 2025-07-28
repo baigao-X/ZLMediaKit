@@ -63,6 +63,59 @@ uint64_t calCandidatePairPriority(uint32_t G, uint32_t D) {
     return ((uint64_t)min_p << 32) | (2 * (uint64_t)max_p) | (G > D ? 1 : 0);
 }
 
+// 获取候选者地址类型字符串的静态函数
+static std::string getAddressTypeStr(CandidateInfo::AddressType type) {
+    switch (type) {
+        case CandidateInfo::AddressType::HOST: return "host";
+        case CandidateInfo::AddressType::SRFLX: return "srflx";
+        case CandidateInfo::AddressType::PRFLX: return "reflx";
+        case CandidateInfo::AddressType::RELAY: return "relay";
+        default: return "invalid";
+    }
+}
+
+// 检查ICE传输策略是否允许该候选者对
+static bool checkIceTransportPolicy(const IceAgent::CandidatePair& pair_info, IceTransport::Pair::Ptr pair) {
+    GET_CONFIG(int, ice_transport_policy, Rtc::kIceTransportPolicy);
+    
+    // 优先使用新的统一配置参数
+    switch (ice_transport_policy) {
+        case static_cast<int>(IceTransportPolicy::kRelayOnly):
+            // 仅支持Relay转发：要求本地或远程是中继类型
+            if (pair_info._local_candidate._type != CandidateInfo::AddressType::RELAY && 
+                pair_info._remote_candidate._type != CandidateInfo::AddressType::RELAY) {
+                DebugL << "relay only policy, skip pair: "
+                    << "local(" << getAddressTypeStr(pair_info._local_candidate._type) << ") " 
+                    << pair_info._local_candidate._addr._host << ":" << pair_info._local_candidate._addr._port
+                    << " <-> "
+                    << "remote(" << getAddressTypeStr(pair_info._remote_candidate._type) << ") " 
+                    << pair_info._remote_candidate._addr._host << ":" << pair_info._remote_candidate._addr._port;
+                return false;
+            }
+            break;
+            
+        case static_cast<int>(IceTransportPolicy::kP2POnly):
+            // 仅支持P2P直连：要求本地和远程都不是中继类型
+            if (pair_info._local_candidate._type == CandidateInfo::AddressType::RELAY ||
+                pair_info._remote_candidate._type == CandidateInfo::AddressType::RELAY) {
+                DebugL << "p2p only policy, skip pair: "
+                    << "local(" << getAddressTypeStr(pair_info._local_candidate._type) << ") " 
+                    << pair_info._local_candidate._addr._host << ":" << pair_info._local_candidate._addr._port
+                    << " <-> "
+                    << "remote(" << getAddressTypeStr(pair_info._remote_candidate._type) << ") " 
+                    << pair_info._remote_candidate._addr._host << ":" << pair_info._remote_candidate._addr._port;
+                return false;
+            }
+            break;
+            
+        case static_cast<int>(IceTransportPolicy::kAll):
+        default:
+            break;
+    }
+    
+    return true;
+}
+
 ////////////  IceServerInfo //////////////////////////
 void IceServerInfo::parse(const std::string &url_in) {
     DebugL << url_in;
@@ -1723,12 +1776,8 @@ void IceAgent::onConnected(IceTransport::Pair::Ptr pair) {
             continue;
         }
 
-        GET_CONFIG(bool, local_only_relayed, Rtc::kLocalOnlyRelayed);
-        if (local_only_relayed && pair->_realyed_addr == nullptr) {
-            DebugL << "local only relayed, skip pair: "
-                << "local(" << pair_info._local_candidate.getAddressTypeStr() << ") " << pair_info._local_candidate._addr._host << ":" << pair_info._local_candidate._addr._port
-                << " <-> "
-                << "remote(" << pair_info._remote_candidate.getAddressTypeStr() << ") " << pair_info._remote_candidate._addr._host << ":" << pair_info._remote_candidate._addr._port;           
+        // 检查ICE传输策略
+        if (!checkIceTransportPolicy(pair_info, pair)) {
             return;
         }
 
@@ -1737,16 +1786,6 @@ void IceAgent::onConnected(IceTransport::Pair::Ptr pair) {
         }
 
         state = CandidateInfo::State::Succeeded;
-
-        //如果开启只走转发路径,忽略除了REALY之外的candidate
-        GET_CONFIG(bool, remote_only_relayed, Rtc::kRemoteOnlyRelayed);
-        if (remote_only_relayed && CandidateInfo::AddressType::RELAY != remote_candidate._type) {
-            DebugL << "remote only relayed, skip pair: "
-                << "local(" << pair_info._local_candidate.getAddressTypeStr() << ") " << pair_info._local_candidate._addr._host << ":" << pair_info._local_candidate._addr._port
-                << " <-> "
-                << "remote(" << pair_info._remote_candidate.getAddressTypeStr() << ") " << pair_info._remote_candidate._addr._host << ":" << pair_info._remote_candidate._addr._port;
-            return;
-        }
 
         InfoL << "push "
             << "local(" << pair_info._local_candidate.getAddressTypeStr() << ") " << pair_info._local_candidate._addr._host << ":" << pair_info._local_candidate._addr._port
@@ -2010,7 +2049,7 @@ void IceTransport::retransmitRequest(const std::string& transaction_id, RequestI
     uint64_t now = toolkit::getCurrentMillisecond();
     req_info._next_timeout = now + req_info._rto;
     
-    DebugL << "Retransmitting STUN request (attempt " << req_info._retry_count 
+    TraceL << "Retransmitting STUN request (attempt " << req_info._retry_count 
            << "/" << RequestInfo::MAX_RETRIES << "), RTO: " << req_info._rto 
            << "ms, transaction_id: " << hexdump(transaction_id.data(), transaction_id.size());
     

@@ -32,6 +32,13 @@
 using namespace RTC;
 namespace mediakit {
 
+// ICE transport policy enum
+enum class IceTransportPolicy {
+    kAll = 0,        // 不限制，支持所有连接类型（默认）
+    kRelayOnly = 1,  // 仅支持Relay转发
+    kP2POnly = 2     // 仅支持P2P直连
+};
+
 // RTC配置项目  [AUTO-TRANSLATED:65784416]
 // RTC configuration project
 namespace Rtc {
@@ -41,8 +48,7 @@ extern const std::string kTimeOutSec;
 extern const std::string kSignalingPort;
 extern const std::string kIcePort;
 extern const std::string kEnableTurn;
-extern const std::string kLocalOnlyRelayed;
-extern const std::string kRemoteOnlyRelayed;
+extern const std::string kIceTransportPolicy;
 extern const std::string kIceUfrag;
 extern const std::string kIcePwd;
 extern const std::string kExternIP;
