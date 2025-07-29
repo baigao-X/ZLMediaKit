@@ -64,6 +64,9 @@ public:
 
     const toolkit::EventPoller::Ptr &getPoller() const {return _poller;}
     void setPoller(const toolkit::EventPoller::Ptr &poller)  {_poller = poller;};
+    
+    // 获取WebRTC transport，用于API查询
+    WebRtcTransport::Ptr getWebRtcTransport() const { return _transport; }
 
 protected:
     virtual bool isPlayer() = 0;

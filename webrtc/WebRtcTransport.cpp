@@ -235,6 +235,52 @@ const std::string &WebRtcTransport::deleteRandStr() const {
     return _delete_rand_str;
 }
 
+void WebRtcTransport::getTransportInfo(const std::function<void(Json::Value)>& callback) const {
+    if (!callback) {
+        return;
+    }
+
+    std::weak_ptr<const WebRtcTransport> weak_self = shared_from_this();
+    _poller->async([weak_self, callback]() {
+        Json::Value result;
+        auto strong_self = weak_self.lock();
+        if (!strong_self) {
+            result["error"] = "Transport object destroyed";
+            callback(result);
+            return;
+        }
+
+        try {
+            result["transport_id"] = strong_self->_identifier;
+            result["role"] = (strong_self->_role == Role::CLIENT) ? "client" : 
+                            (strong_self->_role == Role::PEER) ? "peer" : "none";
+
+            result["signaling_protocol"] = (strong_self->_signaling_protocols == SignalingProtocols::WHEP_WHIP) ? "whep_whip" :
+                                          (strong_self->_signaling_protocols == SignalingProtocols::WEBSOCKET) ? "websocket" : "invalid";
+
+            result["has_offer_sdp"] = (strong_self->_offer_sdp != nullptr);
+            result["has_answer_sdp"] = (strong_self->_answer_sdp != nullptr);
+            result["dtls_state"] = strong_self->_dtls_transport? "connected" : "disconnected";
+            result["srtp_send_ready"] = (strong_self->_srtp_session_send != nullptr);
+            result["srtp_recv_ready"] = (strong_self->_srtp_session_recv != nullptr);
+            
+            // ICE 连接检查列表信息
+            if (strong_self->_ice_agent) {
+                Json::Value ice_info = strong_self->_ice_agent->getChecklistInfo();
+                result["ice_checklists"] = ice_info;
+            } else {
+                result["ice_checklists"] = Json::nullValue;
+            }
+            
+            
+        } catch (const std::exception& ex) {
+            result["error"] = std::string("Exception occurred: ") + ex.what();
+        }
+        
+        callback(result);
+    });
+}
+
 void WebRtcTransport::gatheringCandidates(IceServerInfo::Ptr ice_server, onGatheringCandidateCB cb) {
     _on_gathering_candidate = cb;
     return _ice_agent->gatheringCandidates(ice_server);

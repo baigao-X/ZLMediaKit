@@ -112,7 +112,7 @@ public:
         PEER,
     };
 
-    enum class SignalingProtocols{
+    enum class SignalingProtocols {
         Invalid   = -1,
         WHEP_WHIP = 0,
         WEBSOCKET = 1,  //FOR P2P
@@ -143,6 +143,7 @@ public:
     const std::string& getIdentifier() const override;
     const std::string& deleteRandStr() const override;
 
+
     void inputSockData(char *buf, int len, SocketHelper::Ptr socket, struct sockaddr *addr = nullptr, int addr_len = 0);
     void inputSockData(char *buf, int len, IceTransport::Pair::Ptr pair);
     void sendRtpPacket(const char *buf, int len, bool flush, void *ctx = nullptr);
@@ -161,6 +162,8 @@ public:
     virtual void setSignalingProtocols(SignalingProtocols signaling_protocols) { _signaling_protocols = signaling_protocols;}
 
     virtual float getTimeOutSec();
+
+    void getTransportInfo(const std::function<void(Json::Value)>& callback) const;
 
 protected:
     // for ICE

@@ -34,6 +34,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include "Network/Socket.h"
 #include "Network/UdpClient.h"
 #include "Poller/Timer.h"
+#include "json/json.h"
 
 namespace RTC {
 
@@ -141,6 +142,18 @@ public:
             default: break;
         }
         return "invalid";
+    }
+
+    static std::string getStateStr(State state) {
+        switch (state) {
+            case State::Frozen: return "frozen";
+            case State::Waiting: return "waiting";
+            case State::InProgress: return "in_progress";
+            case State::Succeeded: return "succeeded";
+            case State::Failed: return "failed";
+            default: break;
+        }
+        return "unknown";
     }
 
 public:
@@ -428,6 +441,7 @@ public:
         CandidateInfo _local_candidate;       // 本地候选者信息
         uint64_t _priority;                   // 候选者对优先级（64位，符合RFC 8445）
         CandidateInfo::State _state;          // 连通性检查状态
+        bool _nominated = false;
         
         CandidatePair(Pair::Ptr local_pair, const CandidateInfo& remote, const CandidateInfo& local) 
             : _local_pair(local_pair), _remote_candidate(remote), _local_candidate(local), _state(CandidateInfo::State::Frozen) {
@@ -511,6 +525,9 @@ public:
         return try_last ?  _last_selected_pair.lock() : _selected_pair;
     }
     void setSelectedPair(Pair::Ptr pair);
+
+    // 获取checklist信息，用于API查询
+    Json::Value getChecklistInfo() const;
 
 protected:
     void gatheringSrflxCandidates(Pair::Ptr pair);
@@ -706,8 +723,8 @@ protected:
     CandidateSet _remote_candidates;
 
     //TODO:当前仅支持多数据流复用一个checklist
-    std::vector<CandidatePair> _checklist;
-    std::vector<CandidatePair> _valid_list;
+    std::vector<std::shared_ptr<CandidatePair>> _checklist;
+    std::vector<std::shared_ptr<CandidatePair>> _valid_list;
 
 };
 
