@@ -487,8 +487,12 @@ public:
     
     void initialize() override;
 
-    void gatheringCandidates(IceServerInfo::Ptr ice_server);
-    void connectivityChecks(CandidateInfo candidate);
+    void setIceServer(IceServerInfo::Ptr ice_server) {
+        _ice_server = ice_server;
+    }
+
+    void gatheringCandidate(CandidateTuple::Ptr candidate_tuple, bool gathering_rflx, bool gathering_realy);
+    void connectivityCheck(CandidateInfo candidate);
     void Checks(CandidateInfo candidate);
     void nominated(Pair::Ptr pair, CandidateTuple candidate);
 
@@ -530,11 +534,11 @@ public:
     Json::Value getChecklistInfo() const;
 
 protected:
-    void gatheringSrflxCandidates(Pair::Ptr pair);
-    void gatheringRealyCandidates(Pair::Ptr pair);
-    void localRealyedConnectivityChecks(CandidateInfo candidate);
-    void connectivityChecks(Pair::Ptr pair, CandidateTuple candidate);
-    void tryTriggerredChecks(Pair::Ptr pair);
+    void gatheringSrflxCandidate(Pair::Ptr pair);
+    void gatheringRealyCandidate(Pair::Ptr pair);
+    void localRealyedConnectivityCheck(CandidateInfo candidate);
+    void connectivityCheck(Pair::Ptr pair, CandidateTuple candidate);
+    void tryTriggerredCheck(Pair::Ptr pair);
 
     void sendBindRequest(Pair::Ptr pair, MsgHandler handler);
     void sendBindRequest(Pair::Ptr pair, CandidateTuple candidate, bool use_candidate, MsgHandler handler);
@@ -545,8 +549,8 @@ protected:
     void processRequest(const StunPacket::Ptr packet, Pair::Ptr pair) override;
 
     void handleBindingRequest(const StunPacket::Ptr packet, Pair::Ptr pair) override;
-    void handleGatheringCandidatesResponse(const StunPacket::Ptr packet, Pair::Ptr pair);
-    void handleConnectivityChecksResponse(const StunPacket::Ptr packet, Pair::Ptr pair, CandidateTuple candidate);
+    void handleGatheringCandidateResponse(const StunPacket::Ptr packet, Pair::Ptr pair);
+    void handleConnectivityCheckResponse(const StunPacket::Ptr packet, Pair::Ptr pair, CandidateTuple candidate);
     void handleNominatedResponse(const StunPacket::Ptr packet, Pair::Ptr pair, CandidateTuple candidate);
     void handleAllocateResponse(const StunPacket::Ptr packet, Pair::Ptr pair);
     void handleCreatePermissionResponse(const StunPacket::Ptr packet, Pair::Ptr pair, const sockaddr_storage peer_addr);
@@ -715,10 +719,10 @@ protected:
         }
     };
 
-    //for GATHERING_CANDIDATES
+    //for GATHERING_CANDIDATE
     SocketCandidateManager _socket_candidate_manager; //local candidates
 
-    //for CONNECTIVITY_CHECKS
+    //for CONNECTIVITY_CHECK
     using CandidateSet = std::unordered_set<CandidateInfo, CandidateTuple::ClassHash, CandidateTuple::ClassEqual>;
     CandidateSet _remote_candidates;
 

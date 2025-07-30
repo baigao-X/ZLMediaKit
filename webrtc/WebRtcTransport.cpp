@@ -192,6 +192,38 @@ makeIceCandidate(std::string ip, uint16_t port, uint32_t priority = 100, const s
     return candidate;
 }
 
+static CandidateInfo::Ptr makeCandidateInfoBySdpAttr(SdpAttrCandidate candidate_attr, const std::string& ufrag, const std::string& pwd) {
+    auto candidate = std::make_shared<CandidateInfo>();
+    candidate->_type = mappingCandidateTypeStr2Enum(candidate_attr.type);
+    candidate->_priority = candidate_attr.priority;
+
+    candidate->_addr._host = candidate_attr.address;
+    candidate->_addr._port = candidate_attr.port;
+    candidate->_base_addr._host = candidate->_addr._host;
+    candidate->_base_addr._port = candidate->_addr._port;
+    for (auto it : candidate_attr.arr) {
+        if (it.first == "raddr") {
+            candidate->_base_addr._host = it.second;
+        } 
+        if (it.first == "rport") {
+            candidate->_base_addr._port = atoi(it.second.data());
+        }
+    }
+    candidate->_priority = candidate_attr.priority;
+    candidate->_ufrag = ufrag;
+    candidate->_pwd = pwd;
+
+    if (candidate_attr.transport == "udp") {
+        candidate->_transport = CandidateTuple::TransportType::UDP;
+        candidate->_secure = CandidateTuple::SecureType::NOT_SECURE;
+    } else if (candidate_attr.transport == "tcp") {
+        candidate->_transport = CandidateTuple::TransportType::TCP;
+        candidate->_secure = CandidateTuple::SecureType::NOT_SECURE;
+    }
+
+    return candidate;
+}
+
 WebRtcTransport::WebRtcTransport(const EventPoller::Ptr &poller) {
     _poller = poller;
     static auto prefix = getServerPrefix();
@@ -281,55 +313,33 @@ void WebRtcTransport::getTransportInfo(const std::function<void(Json::Value)>& c
     });
 }
 
-void WebRtcTransport::gatheringCandidates(IceServerInfo::Ptr ice_server, onGatheringCandidateCB cb) {
+void WebRtcTransport::gatheringCandidate(IceServerInfo::Ptr ice_server, onGatheringCandidateCB cb) {
     _on_gathering_candidate = cb;
-    return _ice_agent->gatheringCandidates(ice_server);
+    _ice_agent->setIceServer(ice_server);
+    return _ice_agent->gatheringCandidate(ice_server, true,
+        ice_server->_schema == IceServerInfo::SchemaType::TURN);
 }
 
 void WebRtcTransport::connectivityCheck(SdpAttrCandidate candidate_attr, const std::string& ufrag, const std::string& pwd) {
     DebugL;
-    CandidateInfo candidate;
-    candidate._type = mappingCandidateTypeStr2Enum(candidate_attr.type);
-    candidate._priority = candidate_attr.priority;
-
-    candidate._addr._host = candidate_attr.address;
-    candidate._addr._port = candidate_attr.port;
-    candidate._base_addr._host = candidate._addr._host;
-    candidate._base_addr._port = candidate._addr._port;
-    for (auto it : candidate_attr.arr) {
-        if (it.first == "raddr") {
-            candidate._base_addr._host = it.second;
-        } 
-        if (it.first == "rport") {
-            candidate._base_addr._port = atoi(it.second.data());
-        }
-    }
-    candidate._priority = candidate_attr.priority;
-    candidate._ufrag = ufrag;
-    candidate._pwd = pwd;
-
-    if (candidate_attr.transport == "udp") {
-        candidate._transport = CandidateTuple::TransportType::UDP;
-        candidate._secure = CandidateTuple::SecureType::NOT_SECURE;
-    } else if (candidate_attr.transport == "tcp") {
-        candidate._transport = CandidateTuple::TransportType::TCP;
-        candidate._secure = CandidateTuple::SecureType::NOT_SECURE;
-    }
-
-    return _ice_agent->connectivityChecks(candidate);
+    auto candidate = makeCandidateInfoBySdpAttr(candidate_attr, ufrag, pwd);
+    return _ice_agent->connectivityCheck(*candidate);
 }
 
-void WebRtcTransport::connectivityChecks() {
+void WebRtcTransport::connectivityCheckForSFU() {
     DebugL;
-    auto answer_sdp = answerSdp();
-
     //Connectivity Checks 连通性测试
+
+    auto answer_sdp = answerSdp();
     //TODO: 暂不支持每个媒体源,RTP,RTCP独立的candidates
     for (auto media : answer_sdp->media) {
         for (auto it : media.candidate) {
-            connectivityCheck(it, media.ice_ufrag, media.ice_pwd);
+            auto candidate = makeCandidateInfoBySdpAttr(it, media.ice_ufrag, media.ice_pwd);
+            _ice_agent->gatheringCandidate(candidate, false, false);
+            _ice_agent->connectivityCheck(*candidate);
         }
     }
+
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -29,6 +29,7 @@ public:
     bool _is_ssl;
     std::string _full_url;
     std::string _negotiate_url;   //for whep or whip
+    std::string _delete_url;   //for whep or whip
     std::string _target_secret;
     std::string _params;
     std::string _host;
@@ -83,8 +84,8 @@ protected:
     void doByeWhepOrWhip();
     void checkOut();
 
-    void gatheringCandidates(IceServerInfo::Ptr ice_server);
-    void connectivityChecks();
+    void gatheringCandidate(IceServerInfo::Ptr ice_server);
+    void connectivityCheck();
     void candidate(const std::string& candidate, const std::string& ufrag, const std::string pwd);
 
 protected:

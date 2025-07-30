@@ -119,16 +119,20 @@ void WebRtcClient::startConnect() {
     return;
 }
 
-void WebRtcClient::connectivityChecks() {
+void WebRtcClient::connectivityCheck() {
     DebugL;
-    return _transport->connectivityChecks();
+    return _transport->connectivityCheckForSFU();
 }
 
 void WebRtcClient::onNegotiateFinish() {
     DebugL;
     _is_negotiate_finished = true;
     if (WebRtcTransport::SignalingProtocols::WEBSOCKET == _url._signaling_protocols) {
-        gatheringCandidates(_peer->getIceServer());
+        //P2P模式需要gathering candidates
+        gatheringCandidate(_peer->getIceServer());
+    } else if (WebRtcTransport::SignalingProtocols::WHEP_WHIP == _url._signaling_protocols) {
+        //SFU模式不会存在IP不通的情况， answer中就携带了candidates, 直接进行connectiviryCheck
+        connectivityCheck();
     }
     return;
 }
@@ -165,9 +169,9 @@ void WebRtcClient::doNegotiateWhepOrWhip() {
         }
 
         DebugL << "status:" << response.status() << "\r\n"
-            << "header:\r\n" << (StrPrinter << endl)
+            << "Location:\r\n" << response.getHeader()["Location"]
             << "\r\nrecv answer:\n" << response.content();
-
+        strong_self->_url._delete_url = response.getHeader()["Location"];
 
         if ("201" == response.status()) {
             strong_self->_transport->setAnswerSdp(response.content());
@@ -259,10 +263,10 @@ void WebRtcClient::candidate(const std::string& candidate, const std::string& uf
     return;
 }
 
-void WebRtcClient::gatheringCandidates(IceServerInfo::Ptr ice_server) {
+void WebRtcClient::gatheringCandidate(IceServerInfo::Ptr ice_server) {
     DebugL;
     std::weak_ptr<WebRtcClient> weak_self = std::static_pointer_cast<WebRtcClient>(shared_from_this());
-    _transport->gatheringCandidates(ice_server, [weak_self](const std::string& transport_identifier, const std::string& candidate,
+    _transport->gatheringCandidate(ice_server, [weak_self](const std::string& transport_identifier, const std::string& candidate,
         const std::string& ufrag, const std::string& pwd) {
         auto strong_self = weak_self.lock();
         if (!strong_self) {
@@ -295,7 +299,7 @@ void WebRtcClient::doByeWhepOrWhip() {
     }
     _negotiate->setMethod("DELETE");
     _negotiate->setBody("");
-    _negotiate->startRequester(_url._negotiate_url, [](const toolkit::SockException &ex, const Parser &response) {
+    _negotiate->startRequester(_url._delete_url, [](const toolkit::SockException &ex, const Parser &response) {
         if (ex) {
             WarnL << "network err:" << ex.getErrCode() << " " << ex.what();
             return false;
@@ -314,8 +318,6 @@ void WebRtcClient::onResult(const SockException &ex) {
             // 主动shutdown的，不触发回调
             return;
         }
-
-        doBye();
     }
     return;
 }

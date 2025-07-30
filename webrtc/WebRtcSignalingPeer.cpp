@@ -159,7 +159,7 @@ void WebRtcSignalingPeer::processOffer(SIGNALING_MSG_ARGS, WebRtcInterface &tran
         answer(allArgs[GUEST_ID_KEY], tuple, transport.getIdentifier(), sdp, allArgs[TYPE_KEY] == TYPE_VALUE_PLAY, allArgs[TRANSACTION_ID_KEY]);
 
         std::weak_ptr<WebRtcSignalingPeer> weak_self = std::static_pointer_cast<WebRtcSignalingPeer>(shared_from_this());
-        transport.gatheringCandidates(_ice_server, [weak_self](const std::string& transport_identifier, const std::string& candidate,
+        transport.gatheringCandidate(_ice_server, [weak_self](const std::string& transport_identifier, const std::string& candidate,
             const std::string& ufrag, const std::string pwd) 
         {
             auto strong_self = weak_self.lock();

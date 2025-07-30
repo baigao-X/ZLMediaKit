@@ -68,7 +68,7 @@ public:
     virtual void setMediaSource(const RtspMediaSource::Ptr src) {}
 
     using onGatheringCandidateCB = std::function<void(const std::string& transport_identifier, const std::string& candidate, const std::string& ufrag, const std::string& pwd)>;
-    virtual void gatheringCandidates(IceServerInfo::Ptr ice_server, onGatheringCandidateCB cb = nullptr) = 0;
+    virtual void gatheringCandidate(IceServerInfo::Ptr ice_server, onGatheringCandidateCB cb = nullptr) = 0;
 };
 
 class WebRtcException : public WebRtcInterface {
@@ -87,7 +87,7 @@ public:
         throw _ex;
     }
 
-    void gatheringCandidates(IceServerInfo::Ptr ice_server, onGatheringCandidateCB cb = nullptr) override {
+    void gatheringCandidate(IceServerInfo::Ptr ice_server, onGatheringCandidateCB cb = nullptr) override {
         throw _ex;
     }
 
@@ -128,9 +128,9 @@ public:
 
     void setOnShutdown(std::function<void(const SockException &ex)> cb);
 
-    void gatheringCandidates(IceServerInfo::Ptr ice_server, onGatheringCandidateCB cb = nullptr) override;
+    void gatheringCandidate(IceServerInfo::Ptr ice_server, onGatheringCandidateCB cb = nullptr) override;
     void connectivityCheck(SdpAttrCandidate candidate_attr, const std::string& ufrag, const std::string& pwd);
-    void connectivityChecks();
+    void connectivityCheckForSFU();
 
     std::string createOfferSdp() override;
     std::string getAnswerSdp(const std::string &offer) override final;
