@@ -41,7 +41,7 @@ const uint32_t IceTransport::RequestInfo::MAX_RETRIES;
 #define RTC_FIELD "rtc."
 const string kPortRange = RTC_FIELD "port_range";
 static onceToken token([]() {
-    mINI::Instance()[kPortRange] = "50000-65000";
+    mINI::Instance()[kPortRange] = "49152-65535";
 });
 
 static uint32_t calIceCandidatePriority(CandidateInfo::AddressType type, uint32_t component_id = 1) {
@@ -593,7 +593,7 @@ public:
         weak_ptr<PortManager> weak_self = this->shared_from_this();
 
         static auto func = [weak_self](const string &str, int index) {
-            uint16_t port[] = { 50000, 65000 };
+            uint16_t port[] = { 49152, 65535 };
             auto strong_self = weak_self.lock();
             if (!strong_self) {
                 return port[index];
@@ -1236,7 +1236,6 @@ void IceAgent::sendSendIndication(const sockaddr_storage& peer_addr, toolkit::Bu
     sendPacket(packet, pair);
     return;
 }
-
 
 void IceAgent::gatheringSrflxCandidate(Pair::Ptr pair) {
     // TraceL;

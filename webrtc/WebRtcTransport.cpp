@@ -90,8 +90,8 @@ static onceToken token([]() {
 
     mINI::Instance()[kDataChannelEcho] = true;
 
-    mINI::Instance()[kSignalingPort] = 30000;
-    mINI::Instance()[kIcePort] = 34780;
+    mINI::Instance()[kSignalingPort] = 3000;
+    mINI::Instance()[kIcePort] = 3478;
     mINI::Instance()[kEnableTurn] = 1;
     mINI::Instance()[kIceTransportPolicy] = 0;  // 默认值：不限制(kAll)
     mINI::Instance()[kIceUfrag] = "ZLMediaKit";
