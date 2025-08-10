@@ -662,7 +662,6 @@ std::string WebRtcTransport::getAnswerSdp(const string &offer) {
         _offer_sdp = std::make_shared<RtcSession>();
         _offer_sdp->loadFrom(offer);
         onCheckSdp(SdpType::offer, *_offer_sdp);
-        InfoL << "debug 111";
         _offer_sdp->checkValid();
         setRemoteDtlsFingerprint(SdpType::offer, *_offer_sdp);
 
@@ -676,7 +675,6 @@ std::string WebRtcTransport::getAnswerSdp(const string &offer) {
         _answer_sdp = configure.createAnswer(*_offer_sdp);
         onCheckSdp(SdpType::answer, *_answer_sdp);
         setSdpBitrate(*_answer_sdp);
-        InfoL << "debug 222";
         _answer_sdp->checkValid();
         return _answer_sdp->toString();
     } catch (exception &ex) {
@@ -690,7 +688,6 @@ void WebRtcTransport::setAnswerSdp(const std::string &answer) {
         _answer_sdp = std::make_shared<RtcSession>();
         _answer_sdp->loadFrom(answer);
         onCheckSdp(SdpType::answer, *_answer_sdp);
-        InfoL << "debug 333";
         _answer_sdp->checkValid();
         setRemoteDtlsFingerprint(SdpType::answer, *_answer_sdp);
     } catch (exception &ex) {
