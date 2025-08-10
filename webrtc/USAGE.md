@@ -239,6 +239,10 @@ iceUfrag=ZLMediaKit
 icePwd=ZLMediaKit
 ```
 
+## Examples
+- [zlm_peerconnection](https://gitee.com/libwebrtc_develop/libwebrtc/tree/feature-zlm/examples/zlm_peerconnection)
+  一个基于libwebrtc 实现的zlm p2p 代理拉流简单示例
+
 ## 注意事项
 
 1. **防火墙配置**: 确保 WebRTC 相关端口已开放
