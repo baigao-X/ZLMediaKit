@@ -88,16 +88,16 @@ protected:
     void sendRegisterRequest(ResponseTrigger trigger);
     void handleRegisterAccept(SIGNALING_MSG_ARGS);
 
-    void handleRegisterRefuses(SIGNALING_MSG_ARGS);
+    void handleRegisterReject(SIGNALING_MSG_ARGS);
     void sendUnregisterRequest(ResponseTrigger trigger);
     void handleUnregisterAccept(SIGNALING_MSG_ARGS);
-    void handleUnregisterRefuses(SIGNALING_MSG_ARGS);
+    void handleUnregisterReject(SIGNALING_MSG_ARGS);
 
     void sendCallRequest(const std::string& peer_room_id, const std::string& guest_id, const MediaTuple &tuple, const std::string& sdp, bool is_play, ResponseTrigger trigger);
     void sendCallAccept(const std::string& peer_guest_id, const MediaTuple &tuple, const std::string& sdp, bool is_play, const std::string& transaction_id);
     void handleCallRequest(SIGNALING_MSG_ARGS);
     void handleCallAccept(SIGNALING_MSG_ARGS);
-    void handleCallRefuses(SIGNALING_MSG_ARGS);
+    void handleCallReject(SIGNALING_MSG_ARGS);
 
     void sendCandidateIndication(const std::string& transport_identifier, const std::string& candidate, const std::string& ice_ufrag, const std::string& ice_pwd);
     void handleCandidateIndication(SIGNALING_MSG_ARGS);

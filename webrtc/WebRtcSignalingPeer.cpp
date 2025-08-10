@@ -17,6 +17,7 @@
 using namespace std;
 
 namespace mediakit {
+using namespace Rtc;
 
 //注册到的信令服务器列表
 //不允许注册到同一个服务器地址
@@ -155,7 +156,7 @@ void WebRtcSignalingPeer::candidate(const std::string& transport_identifier, con
 void WebRtcSignalingPeer::processOffer(SIGNALING_MSG_ARGS, WebRtcInterface &transport) {
     try {
         auto sdp = transport.getAnswerSdp((const std::string )allArgs[SDP_KEY]);
-        auto tuple = MediaTuple(allArgs[VHOST_KEY], allArgs[APP_KEY], allArgs[STREAM_KEY]);
+        auto tuple = MediaTuple(allArgs[CALL_VHOST_KEY], allArgs[CALL_APP_KEY], allArgs[CALL_STREAM_KEY]);
         answer(allArgs[GUEST_ID_KEY], tuple, transport.getIdentifier(), sdp, allArgs[TYPE_KEY] == TYPE_VALUE_PLAY, allArgs[TRANSACTION_ID_KEY]);
 
         std::weak_ptr<WebRtcSignalingPeer> weak_self = std::static_pointer_cast<WebRtcSignalingPeer>(shared_from_this());
@@ -174,9 +175,9 @@ void WebRtcSignalingPeer::processOffer(SIGNALING_MSG_ARGS, WebRtcInterface &tran
         body[METHOD_KEY]   = allArgs[METHOD_KEY];
         body[ROOM_ID_KEY]  = allArgs[ROOM_ID_KEY];
         body[GUEST_ID_KEY] = allArgs[GUEST_ID_KEY];
-        body[VHOST_KEY] = allArgs[VHOST_KEY];
-        body[APP_KEY] = allArgs[APP_KEY];
-        body[STREAM_KEY] = allArgs[STREAM_KEY];
+        body[CALL_VHOST_KEY] = allArgs[CALL_VHOST_KEY];
+        body[CALL_APP_KEY] = allArgs[CALL_APP_KEY];
+        body[CALL_STREAM_KEY] = allArgs[CALL_STREAM_KEY];
         body[TYPE_KEY] = allArgs[TYPE_KEY];
         sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], ex.what());
     }
@@ -228,13 +229,13 @@ void WebRtcSignalingPeer::onRecv(const Buffer::Ptr &buffer) {
 
     static onceToken token([]() {
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_ACCEPT, METHOD_VALUE_REGISTER), &WebRtcSignalingPeer::handleRegisterAccept);
-        s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REFUSES, METHOD_VALUE_REGISTER), &WebRtcSignalingPeer::handleRegisterRefuses);
+        s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REJECT, METHOD_VALUE_REGISTER), &WebRtcSignalingPeer::handleRegisterReject);
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_ACCEPT, METHOD_VALUE_UNREGISTER), &WebRtcSignalingPeer::handleUnregisterAccept);
-        s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REFUSES, METHOD_VALUE_UNREGISTER), &WebRtcSignalingPeer::handleUnregisterRefuses);
+        s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REJECT, METHOD_VALUE_UNREGISTER), &WebRtcSignalingPeer::handleUnregisterReject);
 
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REQUEST, METHOD_VALUE_CALL), &WebRtcSignalingPeer::handleCallRequest);
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_ACCEPT, METHOD_VALUE_CALL), &WebRtcSignalingPeer::handleCallAccept);
-        s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REFUSES, METHOD_VALUE_CALL), &WebRtcSignalingPeer::handleCallRefuses);
+        s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REJECT, METHOD_VALUE_CALL), &WebRtcSignalingPeer::handleCallReject);
 
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_INDICATION, METHOD_VALUE_CANDIDATE), &WebRtcSignalingPeer::handleCandidateIndication);
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_INDICATION, METHOD_VALUE_BYE), &WebRtcSignalingPeer::handleByeIndication);
@@ -258,7 +259,7 @@ void WebRtcSignalingPeer::onError(const SockException &err) {
 }
 
 bool WebRtcSignalingPeer::responseFilter(SIGNALING_MSG_ARGS, ResponseTrigger& trigger) {
-    if (allArgs[CLASS_KEY] != CLASS_VALUE_ACCEPT && allArgs[CLASS_KEY] != CLASS_VALUE_REFUSES) {
+    if (allArgs[CLASS_KEY] != CLASS_VALUE_ACCEPT && allArgs[CLASS_KEY] != CLASS_VALUE_REJECT) {
         return false;
     }
 
@@ -331,11 +332,10 @@ void WebRtcSignalingPeer::handleRegisterAccept(SIGNALING_MSG_ARGS) {
     return;
 }
 
-void WebRtcSignalingPeer::handleRegisterRefuses(SIGNALING_MSG_ARGS) {
+void WebRtcSignalingPeer::handleRegisterReject(SIGNALING_MSG_ARGS) {
     TraceL;
     ResponseTrigger trigger;
     if (!responseFilter(allArgs, trigger)) {
-        DebugL << "debug 12223";
         return;
     }
 
@@ -358,7 +358,6 @@ void WebRtcSignalingPeer::sendUnregisterRequest(ResponseTrigger trigger) {
 void WebRtcSignalingPeer::handleUnregisterAccept(SIGNALING_MSG_ARGS) {
     ResponseTrigger trigger;
     if (!responseFilter(allArgs, trigger)) {
-        DebugL << "debug 12223";
         return;
     }
 
@@ -366,7 +365,7 @@ void WebRtcSignalingPeer::handleUnregisterAccept(SIGNALING_MSG_ARGS) {
     return;
 }
 
-void WebRtcSignalingPeer::handleUnregisterRefuses(SIGNALING_MSG_ARGS) {
+void WebRtcSignalingPeer::handleUnregisterReject(SIGNALING_MSG_ARGS) {
     ResponseTrigger trigger;
     if (!responseFilter(allArgs, trigger)) {
         return;
@@ -380,15 +379,15 @@ void WebRtcSignalingPeer::handleUnregisterRefuses(SIGNALING_MSG_ARGS) {
 void WebRtcSignalingPeer::sendCallRequest(const std::string& peer_room_id, const std::string& guest_id, const MediaTuple &tuple, const std::string& sdp, bool is_play, ResponseTrigger trigger) {
     DebugL;
     Json::Value body;
-    body[CLASS_KEY]    = CLASS_VALUE_REQUEST;
-    body[METHOD_KEY]   = METHOD_VALUE_CALL;
-    body[TYPE_KEY]     = is_play? TYPE_VALUE_PLAY : TYPE_VALUE_PUSH;
-    body[GUEST_ID_KEY] = guest_id; //our guest id
-    body[ROOM_ID_KEY]  = peer_room_id;
-    body[VHOST_KEY]    = tuple.vhost;
-    body[APP_KEY]      = tuple.app;
-    body[STREAM_KEY]   = tuple.stream;
-    body[SDP_KEY]      = sdp;
+    body[CLASS_KEY]       = CLASS_VALUE_REQUEST;
+    body[METHOD_KEY]      = METHOD_VALUE_CALL;
+    body[TYPE_KEY]        = is_play? TYPE_VALUE_PLAY : TYPE_VALUE_PUSH;
+    body[GUEST_ID_KEY]    = guest_id; //our guest id
+    body[ROOM_ID_KEY]     = peer_room_id;
+    body[CALL_VHOST_KEY]  = tuple.vhost;
+    body[CALL_APP_KEY]    = tuple.app;
+    body[CALL_STREAM_KEY] = tuple.stream;
+    body[SDP_KEY]         = sdp;
     sendRequest(body, trigger);
     return;
 }
@@ -402,16 +401,16 @@ void WebRtcSignalingPeer::sendCallAccept(const std::string& peer_guest_id, const
     body[TYPE_KEY]           = is_play? TYPE_VALUE_PLAY : TYPE_VALUE_PUSH;
     body[GUEST_ID_KEY]       = peer_guest_id;
     body[ROOM_ID_KEY]        = _room_id;       //our room id
-    body[VHOST_KEY]          = tuple.vhost;
-    body[APP_KEY]            = tuple.app;
-    body[STREAM_KEY]         = tuple.stream;
+    body[CALL_VHOST_KEY]     = tuple.vhost;
+    body[CALL_APP_KEY]       = tuple.app;
+    body[CALL_STREAM_KEY]    = tuple.stream;
     body[SDP_KEY]            = sdp;
     sendPacket(body);
     return; }
 
 void WebRtcSignalingPeer::handleCallRequest(SIGNALING_MSG_ARGS) {
     DebugL;
-    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, TYPE_KEY);
+    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, CALL_VHOST_KEY, CALL_APP_KEY, CALL_STREAM_KEY, TYPE_KEY);
 
     if (allArgs[ROOM_ID_KEY] != getRoomId()) {
         WarnL << "target room_id: " << allArgs[ROOM_ID_KEY] << "mismatch our room_id: " << getRoomId();
@@ -440,7 +439,7 @@ void WebRtcSignalingPeer::handleCallAccept(SIGNALING_MSG_ARGS) {
         return;
     }
 
-    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, TYPE_KEY);
+    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, CALL_VHOST_KEY, CALL_APP_KEY, CALL_STREAM_KEY, TYPE_KEY);
 
     auto room_id = allArgs[ROOM_ID_KEY];
     auto it = _tours.find(room_id);
@@ -459,14 +458,14 @@ void WebRtcSignalingPeer::handleCallAccept(SIGNALING_MSG_ARGS) {
     return;
 };
 
-void WebRtcSignalingPeer::handleCallRefuses(SIGNALING_MSG_ARGS) {
+void WebRtcSignalingPeer::handleCallReject(SIGNALING_MSG_ARGS) {
     DebugL;
     ResponseTrigger trigger;
     if (!responseFilter(allArgs, trigger)) {
         return;
     }
 
-    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, TYPE_KEY);
+    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, CALL_VHOST_KEY, CALL_APP_KEY, CALL_STREAM_KEY, TYPE_KEY);
     DebugL;
 
     auto room_id = allArgs[ROOM_ID_KEY];
@@ -490,7 +489,7 @@ void WebRtcSignalingPeer::handleCallRefuses(SIGNALING_MSG_ARGS) {
 
 void WebRtcSignalingPeer::handleCandidateIndication(SIGNALING_MSG_ARGS) {
     DebugL;
-    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, ICE_KEY, UFRAG_KEY, PWD_KEY);
+    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, CANDIDATE_KEY, UFRAG_KEY, PWD_KEY);
 
     std::string identifier;
     //作为被叫
@@ -518,7 +517,7 @@ void WebRtcSignalingPeer::handleCandidateIndication(SIGNALING_MSG_ARGS) {
         }
     }
 
-    TraceL << "recv remote candidate: " << allArgs[ICE_KEY];
+    TraceL << "recv remote candidate: " << allArgs[CANDIDATE_KEY];
 
     if (identifier.empty()) {
         WarnL << "target room_id: " << allArgs[ROOM_ID_KEY] << " not match our room_id: " << getRoomId()
@@ -533,7 +532,7 @@ void WebRtcSignalingPeer::handleCandidateIndication(SIGNALING_MSG_ARGS) {
     }
 
     SdpAttrCandidate candidate_attr;
-    candidate_attr.parse(allArgs[ICE_KEY]);
+    candidate_attr.parse(allArgs[CANDIDATE_KEY]);
     transport->connectivityCheck(candidate_attr, allArgs[UFRAG_KEY], allArgs[PWD_KEY]);
     return;
 };
@@ -581,7 +580,7 @@ void WebRtcSignalingPeer::sendCandidateIndication(const std::string& transport_i
     Json::Value body;
     body[CLASS_KEY]  = CLASS_VALUE_INDICATION;
     body[METHOD_KEY] = METHOD_VALUE_CANDIDATE;
-    body[ICE_KEY] = candidate;
+    body[CANDIDATE_KEY] = candidate;
     body[UFRAG_KEY] = ice_ufrag;
     body[PWD_KEY] = ice_pwd;
 
@@ -608,7 +607,7 @@ void WebRtcSignalingPeer::sendCandidateIndication(const std::string& transport_i
 }
 
 void WebRtcSignalingPeer::sendRefusesResponse(Json::Value &body, const std::string& transaction_id, const std::string& reason) {
-    body[CLASS_KEY]    = CLASS_VALUE_REFUSES;
+    body[CLASS_KEY]    = CLASS_VALUE_REJECT;
     body[REASON_KEY]   = reason;
     sendResponse(body, transaction_id);
 }

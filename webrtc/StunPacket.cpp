@@ -116,7 +116,7 @@ static toolkit::BufferLikeString openssl_MD5(const void *data, size_t data_len) 
     MD5_CTX ctx;
     MD5_Init(&ctx);
     MD5_Update(&ctx, data, data_len);
-    MD5_Final(key, &ctx);
+    MD5_Final((unsigned char *)str.data(), &ctx);
 #endif //defined(OPENSSL_VERSION_NUMBER) && (OPENSSL_VERSION_NUMBER > 0x10100000L)
     return str;
 }
@@ -598,17 +598,26 @@ StunPacket::Authentication StunPacket::checkAuthentication(const std::string& uf
                 return Authentication::UNAUTHORIZED;
             }
 
-#if 0
-            std::string username = getUsername();
-            // Check that USERNAME attribute begins with our local username plus ":".
-            size_t localUsernameLen = ufrag.length();
-            if (username.length() <= localUsernameLen || username.at(localUsernameLen) != ':' ||
-                (username.compare(0, localUsernameLen, ufrag) != 0)) {
-                DebugL << "11";
-                return Authentication::UNAUTHORIZED;
+            if (getMethod() == Method::ALLOCATE || getMethod() == Method::REFRESH || 
+                getMethod() == Method::CREATEPERMISSION || getMethod() == Method::CHANNELBIND) {
+                // TURN认证：USERNAME应该等于ufrag
+                std::string username = getUsername();
+                if (username != ufrag) {
+                    DebugL << "TURN USERNAME validation failed, expected: " << ufrag << ", got: " << username;
+                    return Authentication::UNAUTHORIZED;
+                }
+            } else {
+                // ICE认证：USERNAME格式为 local-ufrag:remote-ufrag（仅用于ICE BINDING请求）
+                std::string username = getUsername();
+                if (!username.empty()) {
+                    size_t localUsernameLen = ufrag.length();
+                    if (username.length() <= localUsernameLen || username.at(localUsernameLen) != ':' ||
+                        (username.compare(0, localUsernameLen, ufrag) != 0)) {
+                        DebugL << "ICE USERNAME format validation failed, expected format: " << ufrag << ":remote-ufrag, got: " << username;
+                        return Authentication::UNAUTHORIZED;
+                    }
+                }
             }
-#endif
-
             break;
         }
         // This method cannot check authentication in received responses (as we
@@ -619,8 +628,6 @@ StunPacket::Authentication StunPacket::checkAuthentication(const std::string& uf
         case Class::ERROR_RESPONSE:
         break;
     }
-
-    Authentication result = Authentication::OK;
 
     if (attr_message_integrity) {
         // If there is FINGERPRINT it must be discarded for MESSAGE-INTEGRITY calculation,
@@ -636,9 +643,10 @@ StunPacket::Authentication StunPacket::checkAuthentication(const std::string& uf
         BufferLikeString key = password;
         if (attr_nonce && attr_realm) {
             //使用长期凭证机制
-            // key = MD5(username ":" realm ":" password)
+            // 根据RFC 5389/5766标准：key = MD5(username ":" realm ":" password)
             auto realm = attr_realm->getRealm();
-            std::string input = ufrag + ":" + realm.data() + ":" + password;
+            std::string username_for_key = getUsername();
+            std::string input = username_for_key + ":" + std::string(realm.data(), realm.size()) + ":" + password;
             key = openssl_MD5(input.data(), input.size());
 
             // DebugL << "ufrag: " << ufrag;
@@ -647,7 +655,6 @@ StunPacket::Authentication StunPacket::checkAuthentication(const std::string& uf
             // DebugL << "input: " << input;
         }
 
-        // Calculate the HMAC-SHA1 of the message according to MESSAGE-INTEGRITY rules.
         auto computedMessageIntegrity = openssl_HMACsha1(key.data(),key.size(), _data->data(), _message_integrity_data_len);
 
         // DebugL << "cal MessageIntegrity";
@@ -658,23 +665,32 @@ StunPacket::Authentication StunPacket::checkAuthentication(const std::string& uf
         // DebugL << "_hmac: " << toolkit::hexdump(attr_message_integrity->_hmac.data(), attr_message_integrity->_hmac.size());
         // DebugL << "cal: " << toolkit::hexdump(computedMessageIntegrity.data(), computedMessageIntegrity.size());
 
-        // Compare the computed HMAC-SHA1 with the MESSAGE-INTEGRITY in the packet.
-        if (std::memcmp(attr_message_integrity->_hmac.data(), computedMessageIntegrity.data(), computedMessageIntegrity.size()) == 0) {
-            result = Authentication::OK;
-        } else {
-            DebugL << "3";
-            result = Authentication::UNAUTHORIZED;
-        }
+        if (std::memcmp(attr_message_integrity->_hmac.data(), computedMessageIntegrity.data(), computedMessageIntegrity.size()) != 0) {
+            return Authentication::UNAUTHORIZED;
+        } 
 
-        // Restore the header length field.
         if (hasAttribute(StunAttribute::Type::FINGERPRINT)) {
             Byte::Set2Bytes((uint8_t*)_data->data(), 2, _data->size() - HEADER_SIZE);
         }
     }
 
-    //FIXME: FINGERPRINT CHECK
+    // FINGERPRINT验证
+    if (hasAttribute(StunAttribute::Type::FINGERPRINT)) {
+        auto attr_fingerprint = dynamic_pointer_cast<StunAttrFingerprint>(getAttribute(StunAttribute::Type::FINGERPRINT));
+        if (attr_fingerprint) {
+            // 计算FINGERPRINT：对除FINGERPRINT属性外的整个包计算CRC32
+            uint32_t computedFingerprint = getCRC32((uint8_t*)_data->data(), _data->size() - 8) ^ 0x5354554e;
+            if (attr_fingerprint->getFingerprint() != computedFingerprint) {
+                DebugL << "FINGERPRINT verification failed, expected: " << std::hex << computedFingerprint 
+                       << ", got: " << attr_fingerprint->getFingerprint();
+                return Authentication::UNAUTHORIZED;
+            } else {
+                DebugL << "FINGERPRINT verification passed";
+            }
+        }
+    }
 
-    return result;
+    return  Authentication::OK;
 }
 
 void StunPacket::serialize() {
@@ -720,8 +736,9 @@ void StunPacket::serialize() {
 
     // Set type field.
     Byte::Set2Bytes((unsigned char*)_data->data(), 0, typeField);
-    // Set length field. not including the 20-byte STUN header
-    Byte::Set2Bytes((unsigned char*)_data->data(), 2, static_cast<uint16_t>(attr_size + message_integrity_size));
+    uint16_t initial_length = static_cast<uint16_t>(attr_size + message_integrity_size);
+    Byte::Set2Bytes((unsigned char*)_data->data(), 2, initial_length);
+    DebugL << "Initial length field set to: " << initial_length;
     // Set magic cookie.
     std::memcpy((unsigned char*)_data->data() + 4, StunPacket::_magicCookie, 4);
     // Set TransactionId field.
@@ -741,47 +758,52 @@ void StunPacket::serialize() {
         auto attr_nonce = dynamic_pointer_cast<StunAttrNonce>(getAttribute(StunAttribute::Type::NONCE));
         auto attr_realm = dynamic_pointer_cast<StunAttrRealm>(getAttribute(StunAttribute::Type::REALM));
         //FIXME: need use SASLprep(password) replace password
+        // 根据RFC 5766标准：key = MD5(username ":" realm ":" SASLprep(password))
         BufferLikeString key = password;
         if (attr_nonce && attr_realm) {
             //使用长期凭证机制
             // key = MD5(username ":" realm ":" password)
             auto realm = attr_realm->getRealm();
-            std::string input = ufrag + ":" + realm.data() + ":" + password;
+            std::string username = ufrag; // 对于response消息，使用ufrag作为username
+            std::string input = username + ":" + std::string(realm.data(), realm.size()) + ":" + password;
             key = openssl_MD5(input.data(), input.size());
 
+            // DebugL << "Long-term credential used for response:";
             // DebugL << "ufrag: " << ufrag;
-            // DebugL << "realm: " << realm.data();
+            // DebugL << "realm: " << std::string(realm.data(), realm.size());
             // DebugL << "password: " << password;
             // DebugL << "input: " << input;
-        }
+            // DebugL << "MD5 key: " << toolkit::hexdump(key.data(), key.size());
+        } 
 
-        auto computedMessageIntegrity = openssl_HMACsha1(key.data(), key.size(), _data->data(), HEADER_SIZE + attr_size);
+        size_t mi_calc_len = HEADER_SIZE + attr_size;
+        auto computedMessageIntegrity = openssl_HMACsha1(key.data(), key.size(), _data->data(), mi_calc_len);
         auto attr_message_integrity = std::make_shared<StunAttrMessageIntegrity>();
         attr_message_integrity->setHmac(computedMessageIntegrity);
         attr_message_integrity->storeToData();
         memcpy((unsigned char*)_data->data() + HEADER_SIZE + attr_size, attr_message_integrity->data(), attr_message_integrity->size());
 
-        // DebugL << "set MessageIntegrity";
-        // DebugL << "_password: " << _password;
+        // DebugL << "Serialize MESSAGE-INTEGRITY:";
+        // DebugL << "password: \"" << password << "\"";
         // DebugL << "key: " << toolkit::hexdump(key.data(), key.size());
-        // DebugL << "data: " << toolkit::hexdump(_data->data(), HEADER_SIZE + attr_size);
-        // DebugL << "_message_integrity_data_len: " << HEADER_SIZE + attr_size;
-        // DebugL << "_hmac: " << toolkit::hexdump(attr_message_integrity->_hmac.data(), attr_message_integrity->_hmac.size());
-        // DebugL << "cal: " << toolkit::hexdump(computedMessageIntegrity.data(), computedMessageIntegrity.size());
+        // DebugL << "hmac_calculated: " << toolkit::hexdump(computedMessageIntegrity.data(), computedMessageIntegrity.size());
     }
 
     if (fingerprint_size) {
         // Add FINGERPRINT.
         // Compute the CRC32 of the packet up to (but excluding) the FINGERPRINT
-        Byte::Set2Bytes((unsigned char*)_data->data(), 2, static_cast<uint16_t>(attr_size + message_integrity_size + fingerprint_size));
-        uint32_t computedFingerprint = getCRC32((unsigned char*)_data->data(), HEADER_SIZE + attr_size + message_integrity_size) ^ 0x5354554e;
+        uint16_t final_length = static_cast<uint16_t>(attr_size + message_integrity_size + fingerprint_size);
+        Byte::Set2Bytes((unsigned char*)_data->data(), 2, final_length);
+        size_t fp_calc_len = HEADER_SIZE + attr_size + message_integrity_size;
+        uint32_t computedFingerprint = getCRC32((unsigned char*)_data->data(), fp_calc_len) ^ 0x5354554e;
+        
         auto attr_fingerprint = std::make_shared<StunAttrFingerprint>();
         attr_fingerprint->setFingerprint(computedFingerprint);
         attr_fingerprint->storeToData();
         memcpy((unsigned char*)_data->data() + HEADER_SIZE + attr_size + message_integrity_size, attr_fingerprint->data(), attr_fingerprint->size());
     }
 
-return;
+    return;
 }
 
 StunPacket::Ptr StunPacket::createSuccessResponse()
@@ -793,6 +815,19 @@ StunPacket::Ptr StunPacket::createSuccessResponse()
 
     auto packet = std::make_shared<StunPacket>(Class::SUCCESS_RESPONSE, _method);
     packet->_transaction_id = _transaction_id;
+    
+    // 复制认证相关属性到响应包中，用于MESSAGE-INTEGRITY计算
+    auto attr_realm = getAttribute(StunAttribute::Type::REALM);
+    if (attr_realm) {
+        packet->addAttribute(attr_realm);
+    }
+    
+    auto attr_nonce = getAttribute(StunAttribute::Type::NONCE);
+    if (attr_nonce) {
+        packet->addAttribute(attr_nonce);
+        DebugL << "Copied NONCE attribute to response";
+    }
+    
     return packet;
 }
 

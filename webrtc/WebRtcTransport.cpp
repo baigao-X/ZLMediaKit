@@ -9,6 +9,9 @@
  */
 
 #include <iostream>
+#include <functional>
+#include <algorithm>
+#include <cctype>
 #include <srtp2/srtp.h>
 #include "Util/base64.h"
 #include "Network/sockutil.h"
@@ -154,39 +157,56 @@ static std::string mappingCandidateTypeEnum2Str(CandidateInfo::AddressType& type
 }
 
 static CandidateInfo::AddressType mappingCandidateTypeStr2Enum(const std::string& type) {
-    if (type == "host") {
+    if (strcasecmp(type.c_str(), "host") == 0) {
         return CandidateInfo::AddressType::HOST;
-    } else if (type == "srflx") {
+    } else if (strcasecmp(type.c_str(), "srflx") == 0) {
         return CandidateInfo::AddressType::SRFLX;
-    } else if (type == "prflx") {
+    } else if (strcasecmp(type.c_str(), "prflx") == 0) {
         return CandidateInfo::AddressType::PRFLX;
-    } else if (type == "relay") {
+    } else if (strcasecmp(type.c_str(), "relay") == 0) {
         return CandidateInfo::AddressType::RELAY;
     } else {
         return CandidateInfo::AddressType::INVALID;
     }
 }
 
-static SdpAttrCandidate::Ptr
-makeIceCandidate(std::string ip, uint16_t port, uint32_t priority = 100, const std::string& proto = "udp", const std::string& type = "host") {
+// 根据RFC 5245标准计算foundation
+// 1. IP地址类型（IPv4/IPv6）
+// 2. 传输协议（UDP/TCP）
+// 3. 候选类型（host/srflx/prflx/relay）
+// 4. STUN/TURN服务器地址（对于srflx和relay类型）
+static std::string calculateFoundation(const std::string& ip, const std::string& proto, const std::string& type, const std::string& stun_server = "") {
+    // 将协议和类型转换为小写以确保一致性
+    std::string proto_lower = proto;
+    std::string type_lower = type;
+    std::transform(proto_lower.begin(), proto_lower.end(), proto_lower.begin(), ::tolower);
+    std::transform(type_lower.begin(), type_lower.end(), type_lower.begin(), ::tolower);
+    
+    std::string foundation_base = type_lower + "-" + ip + "-" + proto_lower;
+    
+    // 对于server reflexive和relay候选，需要包含STUN/TURN服务器地址
+    if ((type_lower == "srflx" || type_lower == "relay") && !stun_server.empty()) {
+        foundation_base += "-" + stun_server;
+    }
+    
+    std::hash<std::string> hasher;
+    size_t hash_value = hasher(foundation_base);
+    char foundation_str[9];
+    snprintf(foundation_str, sizeof(foundation_str), "%08x", (unsigned int)(hash_value & 0xFFFFFFFF));
+    return std::string(foundation_str);
+}
+
+static SdpAttrCandidate::Ptr makeIceCandidate(std::string ip, uint16_t port, uint32_t priority = 100, 
+        const std::string& proto = "udp", const std::string& type = "host", const std::string& stun_server = "") {
     auto candidate = std::make_shared<SdpAttrCandidate>();
-    candidate->foundation = proto + "candidate";
-    // rtp端口  [AUTO-TRANSLATED:b0addb27]
-    // rtp port
+    candidate->foundation = calculateFoundation(ip, proto, type, stun_server);
     candidate->component = 1;
     candidate->transport = proto;
     candidate->priority = priority;
     candidate->address = std::move(ip);
     candidate->port = port;
     candidate->type = type;
-
-#if 0
-    if (type != "host") {
-        candidate->arr.push_back(std::make_pair("raddr", candidate._base_addr._host));
-    }
-#endif
-
-    if (proto == "tcp") {
+    if (strcasecmp(proto.c_str(), "tcp") == 0) {
         candidate->type += " tcptype passive";
     }
     return candidate;
@@ -213,10 +233,10 @@ static CandidateInfo::Ptr makeCandidateInfoBySdpAttr(SdpAttrCandidate candidate_
     candidate->_ufrag = ufrag;
     candidate->_pwd = pwd;
 
-    if (candidate_attr.transport == "udp") {
+    if (strcasecmp(candidate_attr.transport.c_str(), "udp") == 0) {
         candidate->_transport = CandidateTuple::TransportType::UDP;
         candidate->_secure = CandidateTuple::SecureType::NOT_SECURE;
-    } else if (candidate_attr.transport == "tcp") {
+    } else if (strcasecmp(candidate_attr.transport.c_str(), "tcp") == 0) {
         candidate->_transport = CandidateTuple::TransportType::TCP;
         candidate->_secure = CandidateTuple::SecureType::NOT_SECURE;
     }
@@ -642,6 +662,7 @@ std::string WebRtcTransport::getAnswerSdp(const string &offer) {
         _offer_sdp = std::make_shared<RtcSession>();
         _offer_sdp->loadFrom(offer);
         onCheckSdp(SdpType::offer, *_offer_sdp);
+        InfoL << "debug 111";
         _offer_sdp->checkValid();
         setRemoteDtlsFingerprint(SdpType::offer, *_offer_sdp);
 
@@ -655,6 +676,7 @@ std::string WebRtcTransport::getAnswerSdp(const string &offer) {
         _answer_sdp = configure.createAnswer(*_offer_sdp);
         onCheckSdp(SdpType::answer, *_answer_sdp);
         setSdpBitrate(*_answer_sdp);
+        InfoL << "debug 222";
         _answer_sdp->checkValid();
         return _answer_sdp->toString();
     } catch (exception &ex) {
@@ -668,6 +690,7 @@ void WebRtcTransport::setAnswerSdp(const std::string &answer) {
         _answer_sdp = std::make_shared<RtcSession>();
         _answer_sdp->loadFrom(answer);
         onCheckSdp(SdpType::answer, *_answer_sdp);
+        InfoL << "debug 333";
         _answer_sdp->checkValid();
         setRemoteDtlsFingerprint(SdpType::answer, *_answer_sdp);
     } catch (exception &ex) {

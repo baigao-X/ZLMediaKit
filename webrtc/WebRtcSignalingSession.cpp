@@ -18,6 +18,7 @@
 using namespace std;
 
 namespace mediakit {
+using namespace Rtc;
 
 
 //注册上来的peer列表
@@ -65,7 +66,7 @@ void WebRtcSignalingSession::onRecv(const Buffer::Ptr &buffer) {
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REQUEST, METHOD_VALUE_UNREGISTER), &WebRtcSignalingSession::handleUnregisterRequest);
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REQUEST, METHOD_VALUE_CALL), &WebRtcSignalingSession::handleCallRequest);
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_ACCEPT, METHOD_VALUE_CALL), &WebRtcSignalingSession::handleCallAccept);
-        s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REFUSES, METHOD_VALUE_CALL), &WebRtcSignalingSession::handleCallRefuses);
+        s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_REJECT, METHOD_VALUE_CALL), &WebRtcSignalingSession::handleCallReject);
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_INDICATION, METHOD_VALUE_BYE), &WebRtcSignalingSession::handleByeIndication);
         s_msg_handlers.emplace(std::make_pair(CLASS_VALUE_INDICATION, METHOD_VALUE_CANDIDATE), &WebRtcSignalingSession::handleCandidateIndication);
     });
@@ -114,7 +115,7 @@ void WebRtcSignalingSession::handleRegisterRequest(SIGNALING_MSG_ARGS) {
         if (s_rooms.find(room_id)) {
             //已经注册了
             body[ROOM_ID_KEY] = room_id;
-            return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "room id conflict");
+            return sendRejectResponse(body, allArgs[TRANSACTION_ID_KEY], "room id conflict");
         }
     }
     
@@ -135,11 +136,11 @@ void WebRtcSignalingSession::handleUnregisterRequest(SIGNALING_MSG_ARGS) {
     body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
 
     if (_room_id.empty()) {
-        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "unregistered");
+        return sendRejectResponse(body, allArgs[TRANSACTION_ID_KEY], "unregistered");
     }
 
     if (allArgs[ROOM_ID_KEY] != getRoomId()) {
-        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], 
+        return sendRejectResponse(body, allArgs[TRANSACTION_ID_KEY], 
             StrPrinter << "room_id: \"" << allArgs[ROOM_ID_KEY] << "\" not match room_id:" << getRoomId());
     }
 
@@ -156,23 +157,23 @@ void WebRtcSignalingSession::handleUnregisterRequest(SIGNALING_MSG_ARGS) {
 
 void WebRtcSignalingSession::handleCallRequest(SIGNALING_MSG_ARGS) {
     DebugL;
-    CHECK_ARGS(TRANSACTION_ID_KEY, GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, TYPE_KEY, SDP_KEY);
+    CHECK_ARGS(TRANSACTION_ID_KEY, GUEST_ID_KEY, ROOM_ID_KEY, CALL_VHOST_KEY, CALL_APP_KEY, CALL_STREAM_KEY, TYPE_KEY, SDP_KEY);
 
     Json::Value body;
     body[METHOD_KEY] = METHOD_VALUE_CALL;
     body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
     body[GUEST_ID_KEY] = allArgs[GUEST_ID_KEY];
-    body[VHOST_KEY] = allArgs[VHOST_KEY];
-    body[APP_KEY] = allArgs[APP_KEY];
-    body[STREAM_KEY] = allArgs[STREAM_KEY];
+    body[CALL_VHOST_KEY] = allArgs[CALL_VHOST_KEY];
+    body[CALL_APP_KEY] = allArgs[CALL_APP_KEY];
+    body[CALL_STREAM_KEY] = allArgs[CALL_STREAM_KEY];
     body[TYPE_KEY] = allArgs[TYPE_KEY];
     if (_room_id.empty()) {
-        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
+        return sendRejectResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
     }
 
     auto session = getWebrtcRoomKeeper(allArgs[ROOM_ID_KEY]);
     if (!session) {
-        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], StrPrinter << "room_id: \"" << allArgs[ROOM_ID_KEY] << "\" unregistered");
+        return sendRejectResponse(body, allArgs[TRANSACTION_ID_KEY], StrPrinter << "room_id: \"" << allArgs[ROOM_ID_KEY] << "\" unregistered");
     }
     _tours.emplace(allArgs[GUEST_ID_KEY], allArgs[ROOM_ID_KEY]);
 
@@ -184,13 +185,13 @@ void WebRtcSignalingSession::handleCallRequest(SIGNALING_MSG_ARGS) {
 
 void WebRtcSignalingSession::handleCallAccept(SIGNALING_MSG_ARGS) {
     DebugL;
-    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, VHOST_KEY, APP_KEY, STREAM_KEY, SDP_KEY);
+    CHECK_ARGS(GUEST_ID_KEY, ROOM_ID_KEY, CALL_VHOST_KEY, CALL_APP_KEY, CALL_STREAM_KEY);
 
     Json::Value body;
     body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
 
     if (_room_id.empty()) {
-        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
+        return sendRejectResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
     }
 
     auto it = _guests.find(allArgs[GUEST_ID_KEY]);
@@ -217,7 +218,7 @@ void WebRtcSignalingSession::handleByeIndication(SIGNALING_MSG_ARGS) {
     body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
 
     if (_room_id.empty()) {
-        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
+        return sendRejectResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
     }
 
     if (allArgs[ROOM_ID_KEY] == getRoomId()) {
@@ -251,14 +252,14 @@ void WebRtcSignalingSession::handleByeIndication(SIGNALING_MSG_ARGS) {
 
 void WebRtcSignalingSession::handleCandidateIndication(SIGNALING_MSG_ARGS) {
     DebugL;
-    CHECK_ARGS(TRANSACTION_ID_KEY, GUEST_ID_KEY, ROOM_ID_KEY, ICE_KEY, UFRAG_KEY, PWD_KEY);
+    CHECK_ARGS(TRANSACTION_ID_KEY, GUEST_ID_KEY, ROOM_ID_KEY, CANDIDATE_KEY, UFRAG_KEY, PWD_KEY);
 
     Json::Value body;
     body[METHOD_KEY] = METHOD_VALUE_CANDIDATE;
     body[ROOM_ID_KEY] = allArgs[ROOM_ID_KEY];
 
     if (_room_id.empty()) {
-        return sendRefusesResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
+        return sendRejectResponse(body, allArgs[TRANSACTION_ID_KEY], "should register first");
     }
 
     return handleOtherMsg(allArgs);
@@ -448,9 +449,9 @@ void WebRtcSignalingSession::sendAcceptResponse(Json::Value &body, const std::st
     return sendResponse(body, transaction_id);
 }
 
-void WebRtcSignalingSession::sendRefusesResponse(Json::Value &body, const std::string& transaction_id, const std::string& reason) {
+void WebRtcSignalingSession::sendRejectResponse(Json::Value &body, const std::string& transaction_id, const std::string& reason) {
     DebugL;
-    body[CLASS_KEY] = CLASS_VALUE_REFUSES;
+    body[CLASS_KEY] = CLASS_VALUE_REJECT;
     body[REASON_KEY] = reason;
     return sendResponse(body, transaction_id);
 }

@@ -52,7 +52,7 @@ protected:
     void handleUnregisterRequest(SIGNALING_MSG_ARGS);
     void handleCallRequest(SIGNALING_MSG_ARGS);
     void handleCallAccept(SIGNALING_MSG_ARGS);
-    #define handleCallRefuses handleCallAccept
+    #define handleCallReject handleCallAccept
     void handleByeIndication(SIGNALING_MSG_ARGS);
     void handleCandidateIndication(SIGNALING_MSG_ARGS);
     void handleOtherMsg(SIGNALING_MSG_ARGS);
@@ -66,7 +66,7 @@ protected:
 
     void sendRegisterAccept(Json::Value& body, const std::string& transaction_id);
     void sendAcceptResponse(Json::Value &body, const std::string& transaction_id);
-    void sendRefusesResponse(Json::Value &body, const std::string& transaction_id, const std::string& reason);
+    void sendRejectResponse(Json::Value &body, const std::string& transaction_id, const std::string& reason);
 
     void sendResponse(Json::Value &body, const std::string& transaction_id);
     void sendPacket(const Json::Value &body);

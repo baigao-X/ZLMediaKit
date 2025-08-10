@@ -19,35 +19,36 @@ namespace Rtc {
 
 #define SIGNALING_MSG_ARGS const HttpAllArgs<Json::Value>& allArgs
 
-#define CLASS_KEY               "class"
-#define CLASS_VALUE_REQUEST     "request"
-#define CLASS_VALUE_INDICATION  "indication"        // 指示类型,不需要应答
-#define CLASS_VALUE_ACCEPT      "accept"            // 作为CLASS_VALUE_REQUEST的应答
-#define CLASS_VALUE_REFUSES     "refuses"           // 作为CLASS_VALUE_REQUEST的应答
-#define METHOD_KEY              "method"
-#define METHOD_VALUE_REGISTER   "register"          // 注册
-#define METHOD_VALUE_UNREGISTER "unregister"        // 注销
-#define METHOD_VALUE_CALL       "call"              // 呼叫(取流或推流)
+// WebRTC 信令消息键名和值常量声明
+extern const char* const CLASS_KEY;
+extern const char* const CLASS_VALUE_REQUEST;
+extern const char* const CLASS_VALUE_INDICATION;        // 指示类型,不需要应答
+extern const char* const CLASS_VALUE_ACCEPT;            // 作为CLASS_VALUE_REQUEST的应答
+extern const char* const CLASS_VALUE_REJECT;            // 作为CLASS_VALUE_REQUEST的应答
+extern const char* const METHOD_KEY;
+extern const char* const METHOD_VALUE_REGISTER;         // 注册
+extern const char* const METHOD_VALUE_UNREGISTER;       // 注销
+extern const char* const METHOD_VALUE_CALL;             // 呼叫(取流或推流)
 
-#define METHOD_VALUE_BYE        "bye"               //  挂断
-#define METHOD_VALUE_CANDIDATE  "candidate"
-#define TRANSACTION_ID_KEY      "transaction_id"    // 消息id,每条消息拥有一个唯一的id
-#define ROOM_ID_KEY             "room_id"
-#define GUEST_ID_KEY            "guest_id"          // 每个独立的会话，会拥有一个唯一的guest_id
-#define TYPE_KEY                "type"
-#define TYPE_VALUE_PLAY         "play"              // 拉流
-#define TYPE_VALUE_PUSH         "push"              // 推流
-#define REASON_KEY              "reason"
-#define VHOST_KEY               "vhost"
-#define APP_KEY                 "app"
-#define STREAM_KEY              "stream"
-#define SDP_KEY                 "sdp"
+extern const char* const METHOD_VALUE_BYE;              //  挂断
+extern const char* const METHOD_VALUE_CANDIDATE;
+extern const char* const TRANSACTION_ID_KEY;            // 消息id,每条消息拥有一个唯一的id
+extern const char* const ROOM_ID_KEY;
+extern const char* const GUEST_ID_KEY;                 // 每个独立的会话，会拥有一个唯一的guest_id
+extern const char* const TYPE_KEY;
+extern const char* const TYPE_VALUE_PLAY;              // 拉流
+extern const char* const TYPE_VALUE_PUSH;              // 推流
+extern const char* const REASON_KEY;
+extern const char* const CALL_VHOST_KEY;
+extern const char* const CALL_APP_KEY;
+extern const char* const CALL_STREAM_KEY;
+extern const char* const SDP_KEY;
 
-#define ICE_SERVERS_KEY         "ice_servers"
-#define ICE_KEY                 "ice"
-#define URL_KEY                 "url"
-#define UFRAG_KEY               "ufrag"
-#define PWD_KEY                 "pwd"
+extern const char* const ICE_SERVERS_KEY;
+extern const char* const CANDIDATE_KEY;
+extern const char* const URL_KEY;
+extern const char* const UFRAG_KEY;
+extern const char* const PWD_KEY;
 
 } // namespace Rtc
 } // namespace mediakit
