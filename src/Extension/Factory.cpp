@@ -21,6 +21,8 @@ namespace mediakit {
 
 static std::unordered_map<int, const CodecPlugin *> s_plugins;
 
+REGISTER_CODEC(vp8_plugin);
+REGISTER_CODEC(vp9_plugin);
 REGISTER_CODEC(h264_plugin);
 REGISTER_CODEC(h265_plugin);
 REGISTER_CODEC(av1_plugin);
@@ -97,10 +99,15 @@ static CodecId getVideoCodecIdByAmf(const AMFValue &val) {
     if (val.type() != AMF_NULL) {
         auto type_id = (RtmpVideoCodec)val.as_integer();
         switch (type_id) {
+            case RtmpVideoCodec::fourcc_avc1:
             case RtmpVideoCodec::h264: return CodecH264;
             case RtmpVideoCodec::fourcc_hevc:
             case RtmpVideoCodec::h265: return CodecH265;
+            case RtmpVideoCodec::av1:
             case RtmpVideoCodec::fourcc_av1: return CodecAV1;
+            case RtmpVideoCodec::vp8:
+            case RtmpVideoCodec::fourcc_vp8: return CodecVP8;
+            case RtmpVideoCodec::vp9:
             case RtmpVideoCodec::fourcc_vp9: return CodecVP9;
             default: WarnL << "Unsupported codec: " << (int)type_id; return CodecInvalid;
         }
@@ -153,7 +160,8 @@ static CodecId getAudioCodecIdByAmf(const AMFValue &val) {
             case RtmpAudioCodec::adpcm: return CodecADPCM;
             case RtmpAudioCodec::g711a: return CodecG711A;
             case RtmpAudioCodec::g711u: return CodecG711U;
-            case RtmpAudioCodec::opus: return CodecOpus;
+            case RtmpAudioCodec::opus:
+            case RtmpAudioCodec::fourcc_opus: return CodecOpus;
             default: WarnL << "Unsupported codec: " << (int)type_id; return CodecInvalid;
         }
     }
@@ -191,15 +199,16 @@ AMFValue Factory::getAmfByCodecId(CodecId codecId) {
     GET_CONFIG(bool, enhanced, Rtmp::kEnhanced);
     switch (codecId) {
         case CodecAAC: return AMFValue((int)RtmpAudioCodec::aac);
-        case CodecH264: return AMFValue((int)RtmpVideoCodec::h264);
+        case CodecH264: return enhanced ? AMFValue((int)RtmpVideoCodec::fourcc_avc1) : AMFValue((int)RtmpVideoCodec::h264);
         case CodecH265: return enhanced ? AMFValue((int)RtmpVideoCodec::fourcc_hevc) : AMFValue((int)RtmpVideoCodec::h265);
         case CodecG711A: return AMFValue((int)RtmpAudioCodec::g711a);
         case CodecG711U: return AMFValue((int)RtmpAudioCodec::g711u);
-        case CodecOpus: return AMFValue((int)RtmpAudioCodec::opus);
+        case CodecOpus: return enhanced ? AMFValue((int)RtmpAudioCodec::fourcc_opus) : AMFValue((int)RtmpAudioCodec::opus);
         case CodecADPCM: return AMFValue((int)RtmpAudioCodec::adpcm);
         case CodecMP3: return AMFValue((int)RtmpAudioCodec::mp3);
-        case CodecAV1: return AMFValue((int)RtmpVideoCodec::fourcc_av1);
-        case CodecVP9: return AMFValue((int)RtmpVideoCodec::fourcc_vp9);
+        case CodecAV1: return enhanced ? AMFValue((int)RtmpVideoCodec::fourcc_av1) : AMFValue((int)RtmpVideoCodec::av1);
+        case CodecVP8: return enhanced ? AMFValue((int)RtmpVideoCodec::fourcc_vp8) : AMFValue((int)RtmpVideoCodec::vp8);
+        case CodecVP9: return enhanced ? AMFValue((int)RtmpVideoCodec::fourcc_vp9) : AMFValue((int)RtmpVideoCodec::vp9);
         default: return AMFValue(AMF_NULL);
     }
 }
