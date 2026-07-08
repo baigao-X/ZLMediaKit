@@ -36,14 +36,17 @@ public:
 class FramePacedSender : public FrameWriterInterface, public std::enable_shared_from_this<FramePacedSender> {
 public:
     using OnFrame = std::function<void(const Frame::Ptr &frame)>;
-    // 最小缓存100ms数据  [AUTO-TRANSLATED:7b2fcb0d]
-    // Minimum cache 100ms data
-    static constexpr auto kMinCacheMS = 100;
 
-    FramePacedSender(uint32_t paced_sender_ms, OnFrame cb) {
-        _paced_sender_ms = paced_sender_ms;
-        _cb = std::move(cb);
-    }
+    // Buffer depth thresholds (ms)
+    static constexpr int kLowMS    = 100;  // Below this → slow down
+    static constexpr int kTargetMS = 200;  // Upper bound of normal-speed zone
+    static constexpr int kHighMS   = 500;  // Above this → max speed + force flush
+    // Speed bounds
+    static constexpr float kMinSpeed = 0.5f;
+    static constexpr float kMaxSpeed = 1.5f;
+
+    FramePacedSender(uint32_t paced_sender_ms, OnFrame cb)
+        : _paced_sender_ms(paced_sender_ms), _cb(std::move(cb)) {}
 
     void resetTimer(const EventPoller::Ptr &poller) {
         std::lock_guard<std::recursive_mutex> lck(_mtx);
@@ -65,8 +68,8 @@ public:
         }
         auto &last_dts = _last_dts[frame->getTrackType()];
         if (last_dts > frame->dts()) {
-            // 时间戳回退了，点播流？
-            WarnL << "Dts decrease: " << last_dts << "->" << frame->dts() << ", flush all paced sender cache: " << _cache.size();
+            WarnL << "Dts decrease: " << last_dts << "->" << frame->dts()
+                  << ", flush paced sender cache: " << _cache.size();
             flushCache(frame->dts());
         }
         _cache.emplace(frame->dts(), Frame::getCacheAbleFrame(frame));
@@ -75,34 +78,56 @@ public:
     }
 
 private:
+    /**
+     * Compute playback speed multiplier from buffer depth (ms).
+     *
+     *   buf < kLowMS       → slow down  (kMinSpeed … 1.0)
+     *   kLowMS ≤ buf ≤ kTargetMS → normal     (1.0)
+     *   kTargetMS < buf ≤ kHighMS → speed up   (1.0 … kMaxSpeed)
+     *   buf > kHighMS      → max speed  (kMaxSpeed) + force flush
+     */
+    float calcSpeed(int buf_ms) const {
+        if (buf_ms < kLowMS) {
+            float t = (float)buf_ms / kLowMS;
+            return kMinSpeed + t * (1.0f - kMinSpeed);
+        }
+        if (buf_ms <= kTargetMS) {
+            return 1.0f;
+        }
+        if (buf_ms <= kHighMS) {
+            float t = (float)(buf_ms - kTargetMS) / (kHighMS - kTargetMS);
+            return 1.0f + t * (kMaxSpeed - 1.0f);
+        }
+        return kMaxSpeed;
+    }
+
     void onTick() {
         std::lock_guard<std::recursive_mutex> lck(_mtx);
-        auto max_dts = _cache.empty() ? 0 : _cache.rbegin()->first;
+
+        uint64_t wall_ms = _ticker.elapsedTime();
+        _ticker.resetTime();
+
+        // Buffer depth = newest dts − oldest dts in cache
+        int buf_ms = 0;
+        if (_cache.size() >= 2) {
+            buf_ms = (int)(_cache.rbegin()->first - _cache.begin()->first);
+        }
+
+        float speed = calcSpeed(buf_ms);
+        _virtual_pos += (uint64_t)(wall_ms * speed);
+
+        // Consume frames whose dts ≤ virtual position
         while (!_cache.empty()) {
             auto front = _cache.begin();
-            if (getCurrentStamp() < front->first + _cache_ms) {
-                // 还没到消费时间  [AUTO-TRANSLATED:09fb4c3d]
-                // Not yet time to consume
-                break;
-            }
-            // 时间到了，该消费frame了  [AUTO-TRANSLATED:2f007931]
-            // Time is up, it's time to consume the frame
+            if (front->first > _virtual_pos) break;
             _cb(front->second);
             _cache.erase(front);
         }
 
-        if (_cache.empty() && max_dts) {
-            // 消费太快，需要增加缓存大小  [AUTO-TRANSLATED:c05bfbcd]
-            // Consumption is too fast, need to increase cache size
-            setCurrentStamp(max_dts);
-            _cache_ms += kMinCacheMS;
-        }
-
-        // 消费太慢，需要强制flush数据  [AUTO-TRANSLATED:5613625e]
-        // Consumption is too slow, need to force flush data
-        if (_cache.size() > 25 * 5) {
-            WarnL << "Flush frame paced sender cache: " << _cache.size();
-            flushCache(max_dts);
+        // Safety flush when buffer grows too deep
+        if (buf_ms > kHighMS * 2) {
+            WarnL << "Force flush paced sender cache: buf=" << buf_ms << "ms";
+            flushCache(_cache.empty() ? _virtual_pos : _cache.rbegin()->first);
         }
     }
 
@@ -113,20 +138,16 @@ private:
             _cache.erase(front);
         }
         setCurrentStamp(dts);
-        _cache_ms = kMinCacheMS;
     }
 
-    uint64_t getCurrentStamp() { return _ticker.elapsedTime() + _stamp_offset; }
-
     void setCurrentStamp(uint64_t stamp) {
-        _stamp_offset = stamp;
+        _virtual_pos = stamp;
         _ticker.resetTime();
     }
 
 private:
     uint32_t _paced_sender_ms;
-    uint32_t _cache_ms = kMinCacheMS;
-    uint64_t _stamp_offset = 0;
+    uint64_t _virtual_pos = 0;
     uint64_t _last_dts[2] = {0, 0};
     OnFrame _cb;
     Ticker _ticker;
