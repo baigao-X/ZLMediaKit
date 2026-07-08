@@ -564,7 +564,7 @@ bool MultiMediaSourceMuxer::isRecording(Recorder::type type) {
 
 void MultiMediaSourceMuxer::startSendRtp(const MediaSourceEvent::SendRtpArgs &args, const std::function<void(uint16_t, const toolkit::SockException &)> cb) {
 #if defined(ENABLE_RTPPROXY)
-    createGopCacheIfNeed(1);
+    createGopCacheIfNeed();
 
     auto ring = _ring;
     auto ssrc = args.ssrc;
@@ -634,6 +634,13 @@ bool MultiMediaSourceMuxer::stopSendRtp(const string &ssrc) {
 #else
     return false;
 #endif//ENABLE_RTPPROXY
+}
+
+MultiMediaSourceMuxer::RingType::RingReader::Ptr MultiMediaSourceMuxer::getFrameReader() {
+    auto poller = getOwnerPoller(MediaSource::NullMediaSource());
+    CHECK(poller->isCurrentThread());
+    createGopCacheIfNeed();
+    return _ring->attach(poller);
 }
 
 EventPoller::Ptr MultiMediaSourceMuxer::getOwnerPoller(MediaSource &sender) {
@@ -754,13 +761,7 @@ void MultiMediaSourceMuxer::onAllTrackReady() {
         listener->onAllTrackReady();
     }
 
-#if defined(ENABLE_RTPPROXY)
-    GET_CONFIG(size_t, gop_cache, RtpProxy::kGopCache);
-    if (gop_cache > 0) {
-        createGopCacheIfNeed(gop_cache);
-    }
-#endif
-
+    createGopCacheIfNeed();
     Stamp *first = nullptr;
     for (auto &pr : _stamps) {
         if (!first) {
@@ -775,10 +776,11 @@ void MultiMediaSourceMuxer::onAllTrackReady() {
     InfoL << "stream: " << shortUrl() << " , codec info: " << getTrackInfoStr(this);
 }
 
-void MultiMediaSourceMuxer::createGopCacheIfNeed(size_t gop_count) {
+void MultiMediaSourceMuxer::createGopCacheIfNeed() {
     if (_ring) {
         return;
     }
+    GET_CONFIG(size_t, gop_cache, RtpProxy::kGopCache);
     weak_ptr<MultiMediaSourceMuxer> weak_self = shared_from_this();
     auto src = std::make_shared<MediaSourceForMuxer>(weak_self.lock());
     _ring = std::make_shared<RingType>(1024, [weak_self, src](int size) {
@@ -789,7 +791,7 @@ void MultiMediaSourceMuxer::createGopCacheIfNeed(size_t gop_count) {
                 strong_self->onReaderChanged(*src, strong_self->totalReaderCount());
             });
         }
-    }, gop_count);
+    }, std::max<size_t>(gop_cache, 1));
 }
 
 void MultiMediaSourceMuxer::resetTracks() {
