@@ -57,6 +57,11 @@ extern const std::string kBroadcastRecordTs;
 extern const std::string kBroadcastHttpRequest;
 #define BroadcastHttpRequestArgs const Parser &parser, const HttpSession::HttpResponseInvoker &invoker, bool &consumed, toolkit::SockInfo &sender
 
+// 收到http PUT/POST请求body前的广播，监听者可以设置body以接管请求体
+// Broadcast before receiving http PUT/POST request body, listener can set body to take over the request body
+extern const std::string kBroadcastBeforeHttpRequest;
+#define BroadcastBeforeHttpRequestArgs const Parser &parser, HttpBody::Ptr &body, HttpSession &sender
+
 // 在http文件服务器中,收到http访问文件或目录的广播,通过该事件控制访问http目录的权限  [AUTO-TRANSLATED:2de426b4]
 // In the http file server, broadcast for receiving http access to files or directories. Control access permissions to the http directory through this event.
 extern const std::string kBroadcastHttpAccess;

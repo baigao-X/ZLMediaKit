@@ -213,6 +213,27 @@ void api_regist(const string &api_path, const function<void(API_ARGS_STRING_ASYN
     s_map_api.emplace(api_path, toApi(func));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 文件上传处理器注册机制
+// File upload handler registration: intercepts PUT/POST body via kBroadcastBeforeHttpRequest
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Handler signature: same as API_ARGS_MAP + HttpBody::Ptr &body, so CHECK_SECRET() etc. work inside.
+using HttpBodyHandler = std::function<void(UPLOAD_ARGS_MAP)>;
+static std::map<std::string, HttpBodyHandler, StrCaseCompare> s_map_file_handler;
+
+/**
+ * Register a handler for a URL path. When a PUT/POST request arrives at that path,
+ * the handler is invoked to create an HttpBody (e.g. HttpFileStorage) that receives
+ * the request body stream directly. CHECK_SECRET() can be used inside the handler.
+ *
+ * @param url_path   the HTTP URL path to match
+ * @param handler    callback that sets body; may throw AuthException to reject
+ */
+void upload_regist(const std::string &url_path, HttpBodyHandler handler) {
+    s_map_file_handler.emplace(url_path, std::move(handler));
+}
+
 // 获取HTTP请求中url参数、content参数  [AUTO-TRANSLATED:d161a1e1]
 // Get URL parameters and content parameters from the HTTP request
 ApiArgsType getAllArgs(const Parser &parser) {
@@ -320,6 +341,19 @@ static inline void addHttpListener(){
                 responseApi(API::Exception, ex.what(), invoker);
             }
         },false);
+    });
+
+    // 监听 kBroadcastBeforeHttpRequest：对已注册的 URL 路径设置 HttpBody 以接管 PUT/POST 请求体
+    // Listen for kBroadcastBeforeHttpRequest: set HttpBody for registered URL paths to take over PUT/POST body
+    NoticeCenter::Instance().addListener(&web_api_tag, Broadcast::kBroadcastBeforeHttpRequest, [](BroadcastBeforeHttpRequestArgs) {
+        auto it = s_map_file_handler.find(parser.url());
+        if (it == s_map_file_handler.end()) {
+            return;
+        }
+        HttpSession::KeyValue headerOut;
+        Json::Value val;
+        auto args = getAllArgs(parser);
+        it->second(sender, headerOut, ArgsMap(parser, args), val, body);
     });
 }
 
@@ -771,6 +805,7 @@ void check_secret(toolkit::SockInfo &sender, mediakit::HttpSession::KeyValue &he
             if (api_secret != allArgs["secret"]) {
                 throw AuthException("Incorrect secret");
             }
+            val.removeMember("cookie");
             return;
         } catch (...) {
             // 未提供secret或secret不匹配，这个异常隐藏
